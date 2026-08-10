@@ -1,6 +1,6 @@
 import {
   auth, db, guardClinicPage, signOut,
-  doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, orderBy,
+  doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, query, where, orderBy,
   getDocs, onSnapshot, runTransaction, serverTimestamp,
   showError, clearError
 } from "./core.js";
@@ -13,6 +13,13 @@ let selectedExistingPatientId = null;   // عند اختيار مريض موجو
 let pendingVisitType = "walkin";        // "walkin" أو "appointment"
 let openPatientVisitContext = null;     // معرف الزيارة الحالية عند فتح ملف المريض من الطابور
 let currentOpenPatientId = null;        // معرف المريض المفتوح حالياً بالنافذة (لحفظ الحالة الطبية العامة)
+
+// ---- حالة تبويب الحسابات المالية ----
+let financeMonthDate = startOfMonth(new Date()); // أول يوم بالشهر المعروض حالياً
+let financeMonthVisits = [];
+let financeMonthExpenses = [];
+let unsubFinanceVisits = null;
+let unsubFinanceExpenses = null;
 
 const todayStr = formatDate(new Date());
 
@@ -35,6 +42,8 @@ function applyRolePermissions() {
   if (currentRole === "secretary") {
     const patientsTabBtn = document.querySelector('.side-tab[data-tab="patients"]');
     if (patientsTabBtn) patientsTabBtn.style.display = "none";
+    const financeTabBtn = document.querySelector('.side-tab[data-tab="finance"]');
+    if (financeTabBtn) financeTabBtn.style.display = "none";
   }
 }
 
@@ -58,7 +67,9 @@ document.querySelectorAll(".side-tab").forEach((btn) => {
     const tab = btn.dataset.tab;
     document.getElementById("tab-today").style.display = tab === "today" ? "block" : "none";
     document.getElementById("tab-patients").style.display = tab === "patients" ? "block" : "none";
+    document.getElementById("tab-finance").style.display = tab === "finance" ? "block" : "none";
     if (tab === "patients") renderPatientsList();
+    if (tab === "finance" && currentRole === "doctor") listenFinanceMonth();
   });
 });
 
@@ -78,6 +89,19 @@ function escapeHtml(str) {
   }[m]));
 }
 function genderLabel(g) { return g === "female" ? "أنثى" : "ذكر"; }
+
+const ARABIC_MONTHS = [
+  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"
+];
+function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+function monthRangeStrings(d) {
+  const start = formatDate(new Date(d.getFullYear(), d.getMonth(), 1));
+  const end = formatDate(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+  return { start, end };
+}
+function monthLabel(d) { return `${ARABIC_MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
+function money(n) { return Number(n || 0).toLocaleString() + " د.ع"; }
 
 /* =====================================================================
    المرضى — تحميل وعرض
@@ -493,3 +517,176 @@ async function loadVisitHistory(patientId) {
     wrap.appendChild(div);
   });
 }
+
+/* =====================================================================
+   الحسابات المالية — إيرادات الكشفيات، الصرفيات الشهرية، الجدول اليومي
+   ===================================================================== */
+
+document.getElementById("prevMonthBtn").addEventListener("click", () => {
+  financeMonthDate = new Date(financeMonthDate.getFullYear(), financeMonthDate.getMonth() - 1, 1);
+  listenFinanceMonth();
+});
+document.getElementById("nextMonthBtn").addEventListener("click", () => {
+  financeMonthDate = new Date(financeMonthDate.getFullYear(), financeMonthDate.getMonth() + 1, 1);
+  listenFinanceMonth();
+});
+
+function listenFinanceMonth() {
+  document.getElementById("financeMonthLabel").textContent = monthLabel(financeMonthDate);
+  const { start, end } = monthRangeStrings(financeMonthDate);
+
+  if (unsubFinanceVisits) unsubFinanceVisits();
+  if (unsubFinanceExpenses) unsubFinanceExpenses();
+
+  const visitsQ = query(
+    collection(db, "clinics", clinicId, "visits"),
+    where("date", ">=", start),
+    where("date", "<=", end),
+    orderBy("date", "asc")
+  );
+  unsubFinanceVisits = onSnapshot(visitsQ, (snap) => {
+    financeMonthVisits = [];
+    snap.forEach((d) => financeMonthVisits.push({ id: d.id, ...d.data() }));
+    renderFinance();
+  });
+
+  const expensesQ = query(
+    collection(db, "clinics", clinicId, "expenses"),
+    where("date", ">=", start),
+    where("date", "<=", end),
+    orderBy("date", "asc")
+  );
+  unsubFinanceExpenses = onSnapshot(expensesQ, (snap) => {
+    financeMonthExpenses = [];
+    snap.forEach((d) => financeMonthExpenses.push({ id: d.id, ...d.data() }));
+    renderFinance();
+  });
+}
+
+function renderFinance() {
+  const doneVisits = financeMonthVisits.filter((v) => v.status === "done");
+  const revenue = doneVisits.reduce((sum, v) => sum + (Number(v.fee) || 0), 0);
+  const expenseTotal = financeMonthExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+  document.getElementById("statMonthVisitors").textContent = financeMonthVisits.length;
+  document.getElementById("statMonthRevenue").textContent = money(revenue);
+  document.getElementById("statMonthExpenses").textContent = money(expenseTotal);
+  document.getElementById("statMonthNet").textContent = money(revenue - expenseTotal);
+
+  renderDailyBreakdown(doneVisits);
+  renderExpensesList();
+}
+
+function renderDailyBreakdown(doneVisits) {
+  const body = document.getElementById("dailyBreakdownBody");
+  const empty = document.getElementById("dailyBreakdownEmpty");
+
+  const byDay = {};
+  doneVisits.forEach((v) => {
+    if (!byDay[v.date]) byDay[v.date] = { count: 0, revenue: 0 };
+    byDay[v.date].count += 1;
+    byDay[v.date].revenue += Number(v.fee) || 0;
+  });
+
+  const days = Object.keys(byDay).sort((a, b) => (a < b ? 1 : -1));
+  body.innerHTML = "";
+  empty.style.display = days.length === 0 ? "block" : "none";
+
+  days.forEach((day) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${day}</td>
+      <td>${byDay[day].count}</td>
+      <td>${money(byDay[day].revenue)}</td>
+    `;
+    body.appendChild(row);
+  });
+}
+
+function renderExpensesList() {
+  const wrap = document.getElementById("expensesList");
+  const empty = document.getElementById("expensesEmpty");
+
+  const sorted = [...financeMonthExpenses].sort((a, b) => (a.date < b.date ? 1 : -1));
+  wrap.innerHTML = "";
+  empty.style.display = sorted.length === 0 ? "block" : "none";
+
+  sorted.forEach((e) => {
+    const row = document.createElement("div");
+    row.className = "expense-row";
+    row.innerHTML = `
+      <div>
+        <div class="exname">${escapeHtml(e.description)}</div>
+        <div class="exmeta">${e.date}</div>
+      </div>
+      <div class="exright">
+        <span class="examount">${money(e.amount)}</span>
+        <button class="expense-del-btn" data-id="${e.id}" title="حذف">&times;</button>
+      </div>
+    `;
+    wrap.appendChild(row);
+  });
+
+  wrap.querySelectorAll(".expense-del-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("حذف هذا الصرف نهائياً؟")) return;
+      btn.disabled = true;
+      try {
+        await deleteDoc(doc(db, "clinics", clinicId, "expenses", btn.dataset.id));
+      } catch (err) {
+        alert("صار خطأ أثناء حذف الصرف");
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+/* ---------------- نافذة إضافة صرف ---------------- */
+const expenseModal = document.getElementById("expenseModal");
+document.getElementById("openExpenseBtn").addEventListener("click", () => {
+  clearError(document.getElementById("expenseErrBox"));
+  document.getElementById("expDate").value = todayStr;
+  expenseModal.classList.add("open");
+});
+document.getElementById("closeExpenseModalBtn").addEventListener("click", closeExpenseModal);
+document.getElementById("cancelExpenseBtn").addEventListener("click", closeExpenseModal);
+function closeExpenseModal() {
+  expenseModal.classList.remove("open");
+  document.getElementById("expenseForm").reset();
+  clearError(document.getElementById("expenseErrBox"));
+}
+
+document.getElementById("expenseForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const errBox = document.getElementById("expenseErrBox");
+  clearError(errBox);
+
+  const description = document.getElementById("expDescription").value.trim();
+  const amount = Number(document.getElementById("expAmount").value);
+  const date = document.getElementById("expDate").value;
+
+  if (!description) { showError(errBox, "لازم تكتب وصف الصرف"); return; }
+  if (!amount || amount <= 0) { showError(errBox, "لازم تكتب مبلغ صحيح"); return; }
+  if (!date) { showError(errBox, "لازم تختار تاريخ الصرف"); return; }
+
+  const submitBtn = expenseModal.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = "جارِ الحفظ...";
+  try {
+    await addDoc(collection(db, "clinics", clinicId, "expenses"), {
+      description, amount, date, createdAt: serverTimestamp()
+    });
+    closeExpenseModal();
+    // إذا الصرف بشهر غير الشهر المعروض حالياً، انتقل لعرض شهره تلقائياً
+    const expenseMonth = new Date(date + "T00:00:00");
+    if (expenseMonth.getFullYear() !== financeMonthDate.getFullYear() || expenseMonth.getMonth() !== financeMonthDate.getMonth()) {
+      financeMonthDate = startOfMonth(expenseMonth);
+      listenFinanceMonth();
+    }
+  } catch (err) {
+    showError(errBox, "صار خطأ أثناء حفظ الصرف، حاول مرة ثانية");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "حفظ الصرف";
+  }
+});
