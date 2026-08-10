@@ -423,10 +423,20 @@ document.getElementById("closePatientModalBtn").addEventListener("click", () => 
 
 async function openPatientModal(patientId, visitId) {
   if (currentRole !== "doctor") return; // السكرتيرة ما تملك صلاحية فتح ملف المريض
+  if (!patientId) {
+    alert("تعذر فتح الملف: معرّف المريض غير موجود بهذه الزيارة");
+    console.error("openPatientModal: patientId is missing", { patientId, visitId });
+    return;
+  }
   openPatientVisitContext = visitId;
-  const snap = await getDoc(doc(db, "clinics", clinicId, "patients", patientId));
-  if (!snap.exists()) return;
-  const p = snap.data();
+  try {
+    const snap = await getDoc(doc(db, "clinics", clinicId, "patients", patientId));
+    if (!snap.exists()) {
+      alert("تعذر إيجاد ملف هذا المريض (ربما تم حذفه أو معرّفه غير صحيح)");
+      console.error("openPatientModal: patient doc does not exist", { patientId, clinicId });
+      return;
+    }
+    const p = snap.data();
 
   document.getElementById("patientModalName").textContent = p.fullName;
   document.getElementById("patientBasicInfo").innerHTML = `
@@ -445,8 +455,12 @@ async function openPatientModal(patientId, visitId) {
   document.getElementById("currentTreatment").value = "";
   diagSection.style.display = visitId ? "block" : "none";
 
-  await loadVisitHistory(patientId);
-  patientModal.classList.add("open");
+    await loadVisitHistory(patientId);
+    patientModal.classList.add("open");
+  } catch (err) {
+    alert("صار خطأ أثناء فتح ملف المريض: " + (err.message || err.code || "خطأ غير معروف"));
+    console.error("openPatientModal failed", err);
+  }
 }
 
 document.getElementById("saveGeneralStatusBtn").addEventListener("click", async () => {
