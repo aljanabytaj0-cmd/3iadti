@@ -228,6 +228,101 @@ tbody tr:hover{ background:#FAFCFC; }
 }
 .section-divider::after{ content:''; flex:1; height:1px; background:var(--line); }
 
+/* ---------- تبويبات الشريط الجانبي (لوحة العيادة) ---------- */
+.side-nav{ display:flex; flex-direction:column; gap:4px; margin-bottom:20px; }
+.side-tab{
+  text-align:right; background:transparent; border:none; color:#C7D4DB;
+  font-family:'Cairo',sans-serif; font-size:13.5px; font-weight:600;
+  padding:10px 12px; border-radius:8px; cursor:pointer;
+}
+.side-tab:hover{ background:rgba(255,255,255,.06); color:#fff; }
+.side-tab.active{ background:var(--teal); color:#fff; }
+
+/* ---------- عناصر النموذج الإضافية ---------- */
+.field select, .field textarea{
+  width:100%; padding:11px 13px;
+  border:1.5px solid var(--line); border-radius:10px;
+  font-family:'Cairo',sans-serif; font-size:14.5px;
+  background:#FBFCFC; resize:vertical;
+}
+.field select:focus, .field textarea:focus{ outline:none; border-color:var(--teal); background:#fff; }
+#patientSearchInput, #visitPatientSearch{
+  width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:10px;
+  font-family:'Cairo',sans-serif; font-size:14.5px; background:#FBFCFC;
+}
+#patientSearchInput:focus, #visitPatientSearch:focus{ outline:none; border-color:var(--teal); background:#fff; }
+
+/* ---------- اقتراحات البحث عن مريض ---------- */
+.suggestions{
+  margin-top:8px; border:1px solid var(--line); border-radius:10px;
+  max-height:180px; overflow-y:auto; display:none;
+}
+.suggestions.open{ display:block; }
+.suggestion-item{
+  padding:10px 14px; font-size:13.5px; cursor:pointer; border-bottom:1px solid var(--line);
+}
+.suggestion-item:last-child{ border-bottom:none; }
+.suggestion-item:hover{ background:var(--teal-light); }
+.suggestion-item .sname{ font-weight:700; }
+.suggestion-item .sphone{ color:var(--ink-soft); font-size:12px; }
+
+.selected-patient{
+  margin-top:10px; padding:12px 14px; border-radius:10px;
+  background:var(--teal-light); display:flex; align-items:center; justify-content:space-between;
+}
+.selected-patient .spname{ font-weight:700; color:var(--navy); }
+.selected-patient .spmeta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+.selected-patient button{
+  background:none; border:none; color:var(--danger); font-size:12.5px; cursor:pointer; font-weight:700;
+}
+
+/* ---------- قائمة الطابور اليومي ---------- */
+.queue-item{
+  display:flex; align-items:center; gap:14px;
+  padding:14px 22px; border-bottom:1px solid var(--line);
+}
+.queue-item:last-child{ border-bottom:none; }
+.queue-num{
+  width:38px; height:38px; border-radius:10px; background:var(--navy);
+  color:#fff; font-weight:900; font-family:'Tajawal',sans-serif;
+  display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0;
+}
+.queue-info{ flex:1; min-width:0; }
+.queue-info .qname{ font-weight:700; font-size:14px; }
+.queue-info .qmeta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+.type-badge{
+  font-size:11px; font-weight:700; padding:2px 9px; border-radius:100px; margin-inline-start:8px;
+}
+.type-badge.appt{ background:#EAF1FB; color:#2B5FA8; }
+.type-badge.walkin{ background:var(--teal-light); color:var(--teal); }
+.queue-actions{ display:flex; gap:8px; flex-shrink:0; }
+.queue-actions .btn{ padding:8px 14px; font-size:12.5px; }
+
+/* ---------- بطاقات قائمة المرضى ---------- */
+.patient-row{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 22px; border-bottom:1px solid var(--line); cursor:pointer;
+}
+.patient-row:last-child{ border-bottom:none; }
+.patient-row:hover{ background:#FAFCFC; }
+.patient-row .pname{ font-weight:700; font-size:14px; }
+.patient-row .pmeta{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+
+.modal-wide{ max-width:640px; }
+.patient-basic-info{
+  display:grid; grid-template-columns:repeat(2,1fr); gap:10px 16px;
+  background:#FAFBFB; border:1px solid var(--line); border-radius:10px; padding:14px 16px;
+  font-size:13.5px; margin-bottom:6px;
+}
+.patient-basic-info div span{ display:block; color:var(--ink-soft); font-size:11.5px; margin-bottom:2px; }
+
+.history-item{
+  padding:12px 0; border-bottom:1px solid var(--line);
+}
+.history-item:last-child{ border-bottom:none; }
+.history-item .hdate{ font-size:12px; color:var(--ink-soft); font-weight:700; }
+.history-item .hdiag{ font-size:13.5px; margin-top:4px; }
+
 @media (max-width: 760px){
   .shell{ flex-direction:column; }
   .sidebar{ width:100%; flex-direction:row; align-items:center; padding:14px 16px; }

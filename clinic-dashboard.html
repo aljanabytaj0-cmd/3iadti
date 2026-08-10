@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>منصّة العيادة</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- الشريط الجانبي -->
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"></span> <span id="clinicNameLabel">عيادتي</span></div>
+
+    <p class="side-label">القائمة</p>
+    <nav class="side-nav">
+      <button class="side-tab active" data-tab="today">جدول اليوم</button>
+      <button class="side-tab" data-tab="patients">المرضى</button>
+    </nav>
+
+    <div class="side-user" id="sideUser">
+      <div id="sideUserName">...</div>
+      <span class="role-badge" id="roleBadge">—</span>
+    </div>
+    <button class="btn side-logout" id="logoutBtn">تسجيل الخروج</button>
+  </aside>
+
+  <!-- المحتوى الرئيسي -->
+  <main class="main">
+
+    <!-- ===== تبويب اليوم ===== -->
+    <section id="tab-today" class="tab-panel">
+      <div class="page-head">
+        <div>
+          <h1>جدول اليوم</h1>
+          <p id="todayDateLabel">—</p>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-outline" id="openWalkinBtn">+ تسجيل مباشر</button>
+          <button class="btn btn-teal" id="openApptBtn">+ حجز موعد</button>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-num" id="statWaiting">—</div>
+          <div class="stat-label">بالانتظار</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statDone">—</div>
+          <div class="stat-label">تم الكشف</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statTotalToday">—</div>
+          <div class="stat-label">إجمالي اليوم</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>قائمة المراجعين</h2></div>
+        <div id="queueList"></div>
+        <div class="empty-state" id="queueEmpty" style="display:none;">
+          ما فيه مراجعين مسجّلين اليوم لحد الآن
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== تبويب المرضى ===== -->
+    <section id="tab-patients" class="tab-panel" style="display:none;">
+      <div class="page-head">
+        <div>
+          <h1>سجل المرضى</h1>
+          <p>ابحث بالاسم أو رقم الهاتف لعرض السجل المرضي الكامل</p>
+        </div>
+        <button class="btn btn-teal" id="openNewPatientBtn">+ مريض جديد</button>
+      </div>
+
+      <div class="field" style="max-width:340px; margin-bottom:18px;">
+        <input type="text" id="patientSearchInput" placeholder="ابحث بالاسم أو الهاتف...">
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>كل المرضى</h2></div>
+        <div id="patientsList"></div>
+        <div class="empty-state" id="patientsEmpty" style="display:none;">
+          ما فيه مرضى مسجّلين لحد الآن
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== نافذة إضافة زيارة (موعد أو مباشر) ===== -->
+<div class="modal-overlay" id="visitModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="visitModalTitle">تسجيل زيارة</h3>
+      <button class="modal-close" id="closeVisitModalBtn">&times;</button>
+    </div>
+    <form id="visitForm">
+      <div class="modal-body">
+        <div class="error-msg" id="visitErrBox"></div>
+
+        <div class="field full" id="apptTimeField" style="display:none;">
+          <label>وقت الموعد</label>
+          <input type="time" id="apptTime">
+        </div>
+
+        <div class="section-divider">اختيار المريض</div>
+        <div class="field full">
+          <label>ابحث باسم أو هاتف مريض موجود</label>
+          <input type="text" id="visitPatientSearch" placeholder="اكتب للبحث...">
+          <div id="patientSuggestions" class="suggestions"></div>
+        </div>
+
+        <div id="selectedPatientCard" class="selected-patient" style="display:none;"></div>
+
+        <div id="newPatientFields">
+          <div class="form-grid">
+            <div class="field full">
+              <label>اسم المريض الجديد</label>
+              <input type="text" id="newPatientName">
+            </div>
+            <div class="field">
+              <label>العمر</label>
+              <input type="number" id="newPatientAge" min="0">
+            </div>
+            <div class="field">
+              <label>الجنس</label>
+              <select id="newPatientGender">
+                <option value="male">ذكر</option>
+                <option value="female">أنثى</option>
+              </select>
+            </div>
+            <div class="field full">
+              <label>رقم الهاتف</label>
+              <input type="tel" id="newPatientPhone">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="submit" class="btn btn-teal" id="submitVisitBtn">تأكيد التسجيل</button>
+        <button type="button" class="btn btn-outline" id="cancelVisitBtn">إلغاء</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== نافذة ملف المريض ===== -->
+<div class="modal-overlay" id="patientModal">
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <h3 id="patientModalName">ملف المريض</h3>
+      <button class="modal-close" id="closePatientModalBtn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="patientBasicInfo" class="patient-basic-info"></div>
+
+      <div id="diagnosisSection">
+        <div class="section-divider" style="margin-top:8px;">تسجيل نتيجة الزيارة الحالية</div>
+        <div class="form-grid">
+          <div class="field full">
+            <label>التشخيص / ملاحظات هذه الزيارة</label>
+            <textarea id="currentDiagnosis" rows="3" placeholder="اكتب التشخيص أو ملاحظات الكشف..."></textarea>
+          </div>
+        </div>
+        <button class="btn btn-teal" id="saveDiagnosisBtn" style="margin-top:6px;">حفظ التشخيص</button>
+      </div>
+
+      <div class="section-divider" style="margin-top:26px;">سجل الزيارات السابقة</div>
+      <div id="visitHistoryList"></div>
+      <div class="empty-state" id="historyEmpty" style="display:none; padding:24px;">
+        ما فيه زيارات سابقة مسجّلة لهذا المريض
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== نافذة مريض جديد (من تبويب المرضى مباشرة) ===== -->
+<div class="modal-overlay" id="newPatientModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>إضافة مريض جديد</h3>
+      <button class="modal-close" id="closeNewPatientModalBtn">&times;</button>
+    </div>
+    <form id="newPatientForm">
+      <div class="modal-body">
+        <div class="error-msg" id="newPatientErrBox"></div>
+        <div class="form-grid">
+          <div class="field full">
+            <label>اسم المريض</label>
+            <input type="text" id="npName" required>
+          </div>
+          <div class="field">
+            <label>العمر</label>
+            <input type="number" id="npAge" min="0" required>
+          </div>
+          <div class="field">
+            <label>الجنس</label>
+            <select id="npGender">
+              <option value="male">ذكر</option>
+              <option value="female">أنثى</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label>رقم الهاتف</label>
+            <input type="tel" id="npPhone" required>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="submit" class="btn btn-teal">حفظ المريض</button>
+        <button type="button" class="btn btn-outline" id="cancelNewPatientBtn">إلغاء</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script type="module" src="assets/js/clinic-app.js"></script>
+</body>
+</html>

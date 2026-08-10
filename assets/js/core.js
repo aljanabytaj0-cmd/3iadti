@@ -15,10 +15,15 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  addDoc,
   collection,
   query,
+  where,
   orderBy,
+  limit,
+  getDocs,
   onSnapshot,
+  runTransaction,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
@@ -29,7 +34,8 @@ export const db = getFirestore(app);
 
 export {
   onAuthStateChanged, signInWithEmailAndPassword, signOut,
-  doc, getDoc, setDoc, updateDoc, collection, query, orderBy, onSnapshot, serverTimestamp
+  doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, orderBy, limit,
+  getDocs, onSnapshot, runTransaction, serverTimestamp
 };
 
 // جلب مستند المستخدم (الدور + العيادة المرتبط بها)
@@ -67,6 +73,24 @@ export function guardDeveloperPage(onReady) {
       alert("هذا الحساب غير مخوّل للدخول للوحة المطور");
       await signOut(auth);
       window.location.href = "index.html";
+      return;
+    }
+    onReady(user, userDoc);
+  });
+}
+
+// حماية صفحات الطبيب/السكرتيرة: يتأكد إن المستخدم فعّال وعنده clinicId، ويرجّعه بالـ callback
+export function guardClinicPage(onReady) {
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      window.location.href = "clinic-login.html";
+      return;
+    }
+    const userDoc = await fetchUserDoc(user.uid);
+    if (!userDoc || !["doctor", "secretary"].includes(userDoc.role) || userDoc.active !== true || !userDoc.clinicId) {
+      alert("هذا الحساب غير مخوّل بالدخول لهذه الصفحة");
+      await signOut(auth);
+      window.location.href = "clinic-login.html";
       return;
     }
     onReady(user, userDoc);
