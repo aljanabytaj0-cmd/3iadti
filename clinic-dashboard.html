@@ -18,6 +18,7 @@
     <nav class="side-nav">
       <button class="side-tab active" data-tab="today">جدول اليوم</button>
       <button class="side-tab" data-tab="patients">المرضى</button>
+      <button class="side-tab" data-tab="finance">الحسابات المالية</button>
     </nav>
 
     <div class="side-user" id="sideUser">
@@ -86,6 +87,61 @@
         <div id="patientsList"></div>
         <div class="empty-state" id="patientsEmpty" style="display:none;">
           ما فيه مرضى مسجّلين لحد الآن
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== تبويب الحسابات المالية ===== -->
+    <section id="tab-finance" class="tab-panel" style="display:none;">
+      <div class="page-head">
+        <div>
+          <h1>الحسابات المالية</h1>
+          <p id="financeMonthLabel">—</p>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn btn-outline" id="prevMonthBtn">‹ الشهر السابق</button>
+          <button class="btn btn-outline" id="nextMonthBtn">الشهر التالي ›</button>
+          <button class="btn btn-teal" id="openExpenseBtn">+ إضافة صرف</button>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-num" id="statMonthVisitors">—</div>
+          <div class="stat-label">عدد المراجعين هذا الشهر</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statMonthRevenue">—</div>
+          <div class="stat-label">إجمالي إيرادات الكشفيات</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statMonthExpenses">—</div>
+          <div class="stat-label">إجمالي الصرفيات</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-num" id="statMonthNet">—</div>
+          <div class="stat-label">صافي الربح</div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:22px;">
+        <div class="panel-head"><h2>الجدول اليومي للمراجعين والمبالغ</h2></div>
+        <table>
+          <thead>
+            <tr><th>التاريخ</th><th>عدد المراجعين</th><th>إيراد اليوم</th></tr>
+          </thead>
+          <tbody id="dailyBreakdownBody"></tbody>
+        </table>
+        <div class="empty-state" id="dailyBreakdownEmpty" style="display:none;">
+          ما فيه زيارات مكتملة بهذا الشهر لحد الآن
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>الصرفيات الشهرية</h2></div>
+        <div id="expensesList"></div>
+        <div class="empty-state" id="expensesEmpty" style="display:none;">
+          ما فيه صرفيات مسجّلة لهذا الشهر
         </div>
       </div>
     </section>
@@ -241,6 +297,37 @@
       <div class="modal-foot">
         <button type="submit" class="btn btn-teal">حفظ المريض</button>
         <button type="button" class="btn btn-outline" id="cancelNewPatientBtn">إلغاء</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ===== نافذة إضافة صرف ===== -->
+<div class="modal-overlay" id="expenseModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>إضافة صرف جديد</h3>
+      <button class="modal-close" id="closeExpenseModalBtn">&times;</button>
+    </div>
+    <form id="expenseForm">
+      <div class="modal-body">
+        <div class="error-msg" id="expenseErrBox"></div>
+        <div class="field full">
+          <label>وصف الصرف</label>
+          <input type="text" id="expDescription" placeholder="مثال: إيجار، رواتب، أدوية..." required>
+        </div>
+        <div class="field full">
+          <label>المبلغ (د.ع)</label>
+          <input type="number" id="expAmount" min="0" step="250" required placeholder="مثال: 150000">
+        </div>
+        <div class="field full">
+          <label>التاريخ</label>
+          <input type="date" id="expDate" required>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="submit" class="btn btn-teal">حفظ الصرف</button>
+        <button type="button" class="btn btn-outline" id="cancelExpenseBtn">إلغاء</button>
       </div>
     </form>
   </div>
