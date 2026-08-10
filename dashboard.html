@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>لوحة المطوّر — إدارة العيادات</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- الشريط الجانبي -->
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"></span> منصّة العيادات</div>
+    <p class="side-label">القائمة</p>
+    <div style="font-size:13.5px; font-weight:700; color:#fff; padding:8px 10px; background:rgba(255,255,255,.08); border-radius:8px;">
+      إدارة العيادات
+    </div>
+
+    <div class="side-user" id="sideUser">
+      <div id="sideUserName">...</div>
+      <span class="role-badge">مطوّر</span>
+    </div>
+    <button class="btn side-logout" id="logoutBtn">تسجيل الخروج</button>
+  </aside>
+
+  <!-- المحتوى الرئيسي -->
+  <main class="main">
+    <div class="page-head">
+      <div>
+        <h1>العيادات المسجّلة</h1>
+        <p>إنشاء وإدارة حسابات الأطباء والسكرتاريات، وكل عيادة معزولة تماماً عن البقية</p>
+      </div>
+      <button class="btn btn-teal" id="openAddBtn">+ إضافة طبيب جديد</button>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-num" id="statTotal">—</div>
+        <div class="stat-label">إجمالي العيادات</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statActive">—</div>
+        <div class="stat-label">عيادات فعّالة</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statInactive">—</div>
+        <div class="stat-label">عيادات معطّلة</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h2>قائمة الأطباء</h2>
+      </div>
+      <div id="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th>الطبيب</th>
+              <th>التخصص</th>
+              <th>السكرتيرة</th>
+              <th>الهاتف</th>
+              <th>الحالة</th>
+              <th>إجراء</th>
+            </tr>
+          </thead>
+          <tbody id="clinicsBody">
+            <!-- تُملأ عبر JS -->
+          </tbody>
+        </table>
+        <div class="empty-state" id="emptyState" style="display:none;">
+          ما فيه عيادات مسجّلة لحد الآن — اضغط "إضافة طبيب جديد" لبدء أول حساب
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- نافذة إضافة طبيب جديد -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>إضافة طبيب جديد</h3>
+      <button class="modal-close" id="closeModalBtn">&times;</button>
+    </div>
+    <form id="addForm">
+      <div class="modal-body">
+        <div class="error-msg" id="addErrBox"></div>
+
+        <div class="form-grid">
+          <div class="section-divider">بيانات العيادة</div>
+
+          <div class="field full">
+            <label>اسم الطبيب</label>
+            <input type="text" id="doctorName" required>
+          </div>
+          <div class="field">
+            <label>التخصص</label>
+            <input type="text" id="specialty" required>
+          </div>
+          <div class="field">
+            <label>رقم الهاتف</label>
+            <input type="tel" id="phone" required>
+          </div>
+
+          <div class="section-divider">حساب دخول الطبيب</div>
+          <div class="field">
+            <label>البريد الإلكتروني</label>
+            <input type="email" id="doctorEmail" required>
+          </div>
+          <div class="field">
+            <label>كلمة المرور الأولية</label>
+            <input type="text" id="doctorPassword" required minlength="6">
+          </div>
+
+          <div class="section-divider">حساب دخول السكرتيرة</div>
+          <div class="field">
+            <label>اسم السكرتيرة</label>
+            <input type="text" id="secretaryName" required>
+          </div>
+          <div class="field">
+            <label>البريد الإلكتروني</label>
+            <input type="email" id="secretaryEmail" required>
+          </div>
+          <div class="field full">
+            <label>كلمة المرور الأولية</label>
+            <input type="text" id="secretaryPassword" required minlength="6">
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="submit" class="btn btn-teal" id="submitAddBtn">إنشاء الحسابات</button>
+        <button type="button" class="btn btn-outline" id="cancelAddBtn">إلغاء</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script type="module" src="assets/js/dashboard.js"></script>
+</body>
+</html>
