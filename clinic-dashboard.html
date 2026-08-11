@@ -17,7 +17,7 @@
     <p class="side-label">القائمة</p>
     <nav class="side-nav">
       <button class="side-tab active" data-tab="today">جدول اليوم</button>
-      <button class="side-tab" data-tab="patients">المرضى</button>
+      <button class="side-tab" data-tab="patients">سجل المرضى</button>
       <button class="side-tab" data-tab="finance">الحسابات المالية</button>
     </nav>
 
@@ -73,7 +73,7 @@
       <div class="page-head">
         <div>
           <h1>سجل المرضى</h1>
-          <p>ابحث بالاسم أو رقم الهاتف لعرض السجل المرضي الكامل</p>
+          <p>الأرشيف الكامل لكل مريض تسجّل بالعيادة — ابحث بالاسم أو الهاتف لعرض السجل المرضي الكامل</p>
         </div>
         <button class="btn btn-teal" id="openNewPatientBtn">+ مريض جديد</button>
       </div>
@@ -215,7 +215,10 @@
 <div class="modal-overlay" id="patientModal">
   <div class="modal modal-wide">
     <div class="modal-head">
-      <h3 id="patientModalName">ملف المريض</h3>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <h3 id="patientModalName" style="margin:0;">ملف المريض</h3>
+        <span id="patientModalVisitBadge"></span>
+      </div>
       <button class="modal-close" id="closePatientModalBtn">&times;</button>
     </div>
     <div class="modal-body">
@@ -235,7 +238,7 @@
       <button class="btn btn-outline" id="saveGeneralStatusBtn" style="margin-top:6px;">حفظ الحالة الطبية العامة</button>
 
       <div id="diagnosisSection">
-        <div class="section-divider" style="margin-top:22px;">تسجيل نتيجة الزيارة الحالية</div>
+        <div class="section-divider" style="margin-top:22px;">إتمام الاستشارة الحالية</div>
         <div class="form-grid">
           <div class="field full">
             <label>الأعراض</label>
@@ -250,13 +253,17 @@
             <textarea id="currentTreatment" rows="2" placeholder="الأدوية والجرعات..."></textarea>
           </div>
         </div>
-        <button class="btn btn-teal" id="saveDiagnosisBtn" style="margin-top:6px;">حفظ نتيجة الزيارة</button>
+        <button class="btn btn-teal" id="saveDiagnosisBtn" style="margin-top:6px;">إتمام الاستشارة</button>
       </div>
 
       <div class="section-divider" style="margin-top:26px;">سجل الزيارات السابقة</div>
       <div id="visitHistoryList"></div>
       <div class="empty-state" id="historyEmpty" style="display:none; padding:24px;">
         ما فيه زيارات سابقة مسجّلة لهذا المريض
+      </div>
+
+      <div id="deletePatientZone" style="display:none; margin-top:26px; padding-top:18px; border-top:1px solid var(--line);">
+        <button class="btn btn-danger-ghost" id="deletePatientBtn">حذف المريض نهائياً</button>
       </div>
     </div>
   </div>
