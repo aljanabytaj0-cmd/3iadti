@@ -112,6 +112,7 @@ function listenPatients() {
     allPatients = [];
     snap.forEach((d) => allPatients.push({ id: d.id, ...d.data() }));
     renderPatientsList();
+    renderQueue();
   });
 }
 
@@ -131,14 +132,27 @@ function renderPatientsList() {
   filtered.forEach((p) => {
     const row = document.createElement("div");
     row.className = "patient-row";
+    const visitBadge = (p.visitsCount || 0) > 0
+      ? `<span class="visit-badge returning">مراجع سابق</span>`
+      : `<span class="visit-badge first">زيارة أولى</span>`;
     row.innerHTML = `
       <div>
-        <div class="pname">${escapeHtml(p.fullName)}</div>
+        <div class="pname">${escapeHtml(p.fullName)} ${visitBadge}</div>
         <div class="pmeta">${genderLabel(p.gender)} • ${escapeHtml(p.age ?? "—")} سنة • ${escapeHtml(p.phone || "—")}</div>
       </div>
-      <span style="color:var(--ink-soft); font-size:18px;">›</span>
+      <div style="display:flex; align-items:center; gap:10px;">
+        ${currentRole === "doctor" ? `<button class="patient-del-btn" data-id="${p.id}" data-name="${escapeHtml(p.fullName)}" title="حذف المريض">&times;</button>` : ""}
+        <span style="color:var(--ink-soft); font-size:18px;">›</span>
+      </div>
     `;
     row.addEventListener("click", () => openPatientModal(p.id, null));
+    const delBtn = row.querySelector(".patient-del-btn");
+    if (delBtn) {
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deletePatientRecord(delBtn.dataset.id, delBtn.dataset.name);
+      });
+    }
     wrap.appendChild(row);
   });
 }
@@ -168,6 +182,7 @@ document.getElementById("newPatientForm").addEventListener("submit", async (e) =
       age: Number(document.getElementById("npAge").value),
       gender: document.getElementById("npGender").value,
       phone: document.getElementById("npPhone").value.trim(),
+      visitsCount: 0,
       createdAt: serverTimestamp()
     });
     closeNewPatientModal();
@@ -213,23 +228,29 @@ function renderQueue() {
     let actionsHtml = "";
     if (isDoctor) {
       if (v.status === "waiting") {
-        actionsHtml = `<button class="btn btn-teal start-btn" data-id="${v.id}">بدء الكشف</button>`;
+        actionsHtml = `<button class="btn btn-teal start-btn" data-id="${v.id}">بدء الخدمة</button>`;
       } else if (v.status === "in_progress") {
-        actionsHtml = `
-          <button class="btn btn-outline open-file-btn" data-id="${v.id}" data-pid="${v.patientId}">فتح الملف</button>
-          <button class="btn btn-teal finish-btn" data-id="${v.id}">إنهاء</button>`;
+        actionsHtml = `<button class="btn btn-teal open-file-btn" data-id="${v.id}" data-pid="${v.patientId}" data-status="in_progress">متابعة الخدمة</button>`;
       } else {
-        actionsHtml = `<button class="btn btn-outline open-file-btn" data-id="${v.id}" data-pid="${v.patientId}">عرض الملف</button>`;
+        actionsHtml = `<button class="btn btn-outline open-file-btn" data-id="${v.id}" data-pid="${v.patientId}" data-status="done">عرض الملف</button>`;
       }
     }
+
+    const patientRecord = allPatients.find((p) => p.id === v.patientId);
+    const visitBadge = patientRecord
+      ? ((patientRecord.visitsCount || 0) > 0
+          ? `<span class="visit-badge returning">مراجع سابق</span>`
+          : `<span class="visit-badge first">زيارة أولى</span>`)
+      : "";
 
     row.innerHTML = `
       <div class="queue-num">${v.sortTime || "--:--"}</div>
       <div class="queue-info">
-        <div class="qname ${isDoctor ? "clickable-name" : ""}" ${isDoctor ? `data-pid="${v.patientId}" data-vid="${v.id}"` : ""}>${escapeHtml(v.patientName)}
+        <div class="qname ${isDoctor ? "clickable-name" : ""}" ${isDoctor ? `data-pid="${v.patientId}" data-vid="${v.id}" data-status="${v.status}"` : ""}>${escapeHtml(v.patientName)}
           <span class="type-badge ${v.visitType === "appointment" ? "appt" : "walkin"}">
             ${v.visitType === "appointment" ? "موعد" : "مباشر"}
           </span>
+          ${visitBadge}
         </div>
         <div class="qmeta">${escapeHtml(v.patientPhone || "")} • ${statusLabel}${v.fee ? " • " + Number(v.fee).toLocaleString() + " د.ع" : ""}</div>
       </div>
@@ -240,7 +261,7 @@ function renderQueue() {
 
   if (currentRole === "doctor") {
     wrap.querySelectorAll(".clickable-name").forEach((el) => {
-      el.addEventListener("click", () => openPatientModal(el.dataset.pid, el.dataset.vid));
+      el.addEventListener("click", () => openPatientModal(el.dataset.pid, el.dataset.vid, el.dataset.status));
     });
   }
 
@@ -249,17 +270,11 @@ function renderQueue() {
       btn.disabled = true;
       await updateDoc(doc(db, "clinics", clinicId, "visits", btn.dataset.id), { status: "in_progress" });
       const v = todayVisits.find(x => x.id === btn.dataset.id);
-      if (v) openPatientModal(v.patientId, v.id);
-    });
-  });
-  wrap.querySelectorAll(".finish-btn").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      await updateDoc(doc(db, "clinics", clinicId, "visits", btn.dataset.id), { status: "done" });
+      if (v) openPatientModal(v.patientId, v.id, "in_progress");
     });
   });
   wrap.querySelectorAll(".open-file-btn").forEach((btn) => {
-    btn.addEventListener("click", () => openPatientModal(btn.dataset.pid, btn.dataset.id));
+    btn.addEventListener("click", () => openPatientModal(btn.dataset.pid, btn.dataset.id, btn.dataset.status));
   });
 }
 
@@ -360,7 +375,7 @@ document.getElementById("visitForm").addEventListener("submit", async (e) => {
       if (!name) throw new Error("NAME_REQUIRED");
 
       const newPatientRef = await addDoc(collection(db, "clinics", clinicId, "patients"), {
-        fullName: name, age, gender, phone, createdAt: serverTimestamp()
+        fullName: name, age, gender, phone, visitsCount: 0, createdAt: serverTimestamp()
       });
       patientId = newPatientRef.id;
       patientName = name; patientPhone = phone;
@@ -421,7 +436,7 @@ document.getElementById("visitForm").addEventListener("submit", async (e) => {
 const patientModal = document.getElementById("patientModal");
 document.getElementById("closePatientModalBtn").addEventListener("click", () => patientModal.classList.remove("open"));
 
-async function openPatientModal(patientId, visitId) {
+async function openPatientModal(patientId, visitId, visitStatus) {
   if (currentRole !== "doctor") return; // السكرتيرة ما تملك صلاحية فتح ملف المريض
   if (!patientId) {
     alert("تعذر فتح الملف: معرّف المريض غير موجود بهذه الزيارة");
@@ -439,27 +454,50 @@ async function openPatientModal(patientId, visitId) {
     const p = snap.data();
 
   document.getElementById("patientModalName").textContent = p.fullName;
+  document.getElementById("patientModalVisitBadge").innerHTML = (p.visitsCount || 0) > 0
+    ? `<span class="visit-badge returning">مراجع سابق</span>`
+    : `<span class="visit-badge first">زيارة أولى</span>`;
   document.getElementById("patientBasicInfo").innerHTML = `
     <div><span>العمر</span>${escapeHtml(p.age ?? "—")} سنة</div>
     <div><span>الجنس</span>${genderLabel(p.gender)}</div>
     <div><span>الهاتف</span>${escapeHtml(p.phone || "—")}</div>
+    <div><span>عدد الزيارات السابقة</span>${p.visitsCount || 0}</div>
   `;
 
   document.getElementById("chronicDiseases").value = p.chronicDiseases || "";
   document.getElementById("allergiesNotes").value = p.allergiesNotes || "";
   currentOpenPatientId = patientId;
 
+  const deleteZone = document.getElementById("deletePatientZone");
+  deleteZone.style.display = currentRole === "doctor" ? "block" : "none";
+  document.getElementById("deletePatientBtn").onclick = () => deletePatientRecord(patientId, p.fullName, true);
+
   const diagSection = document.getElementById("diagnosisSection");
   document.getElementById("currentSymptoms").value = "";
   document.getElementById("currentDiagnosis").value = "";
   document.getElementById("currentTreatment").value = "";
-  diagSection.style.display = visitId ? "block" : "none";
+  diagSection.style.display = (visitId && visitStatus !== "done") ? "block" : "none";
 
     await loadVisitHistory(patientId);
     patientModal.classList.add("open");
   } catch (err) {
     alert("صار خطأ أثناء فتح ملف المريض: " + (err.message || err.code || "خطأ غير معروف"));
     console.error("openPatientModal failed", err);
+  }
+}
+
+// حذف مريض نهائياً — الطبيب فقط. لا نحذف سجل زياراته حفاظاً على دقة السجلات المالية
+// (كل زيارة أصلاً تحتفظ باسم وهاتف المريض بشكل منفصل بحقولها الخاصة)
+async function deletePatientRecord(patientId, patientName, closeModalAfter) {
+  if (currentRole !== "doctor") return;
+  const confirmed = confirm(`حذف المريض "${patientName}" نهائياً؟ هذا الإجراء ما ينرجع.`);
+  if (!confirmed) return;
+  try {
+    await deleteDoc(doc(db, "clinics", clinicId, "patients", patientId));
+    if (closeModalAfter) patientModal.classList.remove("open");
+  } catch (err) {
+    alert("صار خطأ أثناء حذف المريض");
+    console.error("deletePatientRecord failed", err);
   }
 }
 
@@ -481,20 +519,32 @@ document.getElementById("saveGeneralStatusBtn").addEventListener("click", async 
 });
 
 document.getElementById("saveDiagnosisBtn").addEventListener("click", async () => {
-  if (!openPatientVisitContext) return;
+  if (!openPatientVisitContext || !currentOpenPatientId) return;
   const btn = document.getElementById("saveDiagnosisBtn");
   btn.disabled = true;
+  btn.textContent = "جارِ الحفظ...";
   try {
+    // 1) حفظ تفاصيل الاستشارة وتعليم الزيارة كمكتملة
     await updateDoc(doc(db, "clinics", clinicId, "visits", openPatientVisitContext), {
       symptoms: document.getElementById("currentSymptoms").value.trim(),
       diagnosis: document.getElementById("currentDiagnosis").value.trim(),
-      treatment: document.getElementById("currentTreatment").value.trim()
+      treatment: document.getElementById("currentTreatment").value.trim(),
+      status: "done"
     });
-    btn.textContent = "تم الحفظ ✓";
-    setTimeout(() => { btn.textContent = "حفظ نتيجة الزيارة"; btn.disabled = false; }, 1400);
+    // 2) زيادة عداد زيارات المريض حتى يظهر "مراجع سابق" بالمرات الجاية
+    const patientRecord = allPatients.find((p) => p.id === currentOpenPatientId);
+    const nextCount = (patientRecord?.visitsCount || 0) + 1;
+    await updateDoc(doc(db, "clinics", clinicId, "patients", currentOpenPatientId), {
+      visitsCount: nextCount
+    });
+    // 3) إغلاق النافذة — الاستشارة اكتملت والمريض انحفظ بسجل المرضى
+    patientModal.classList.remove("open");
   } catch (err) {
+    alert("صار خطأ أثناء إتمام الاستشارة");
+    console.error("saveDiagnosisBtn failed", err);
+  } finally {
     btn.disabled = false;
-    alert("صار خطأ أثناء حفظ نتيجة الزيارة");
+    btn.textContent = "إتمام الاستشارة";
   }
 });
 
