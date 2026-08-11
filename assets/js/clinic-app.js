@@ -234,6 +234,7 @@ function renderQueue() {
       } else {
         actionsHtml = `<button class="btn btn-outline open-file-btn" data-id="${v.id}" data-pid="${v.patientId}" data-status="done">عرض الملف</button>`;
       }
+      actionsHtml += `<button class="expense-del-btn queue-del-btn" data-id="${v.id}" data-pid="${v.patientId}" data-status="${v.status}" data-name="${escapeHtml(v.patientName)}" title="حذف المراجعة">&times;</button>`;
     }
 
     const patientRecord = allPatients.find((p) => p.id === v.patientId);
@@ -275,6 +276,12 @@ function renderQueue() {
   });
   wrap.querySelectorAll(".open-file-btn").forEach((btn) => {
     btn.addEventListener("click", () => openPatientModal(btn.dataset.pid, btn.dataset.id, btn.dataset.status));
+  });
+  wrap.querySelectorAll(".queue-del-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      deleteVisitRecord(btn.dataset.id, btn.dataset.pid, btn.dataset.status, btn.dataset.name);
+    });
   });
 }
 
@@ -483,6 +490,29 @@ async function openPatientModal(patientId, visitId, visitStatus) {
   } catch (err) {
     alert("صار خطأ أثناء فتح ملف المريض: " + (err.message || err.code || "خطأ غير معروف"));
     console.error("openPatientModal failed", err);
+  }
+}
+
+// حذف مراجعة نهائياً — الطبيب فقط. تنحذف فوراً من شاشة السكرتيرة أيضاً
+// لأن القائمة مبنية على onSnapshot حي على نفس مستند الزيارة بقاعدة البيانات
+async function deleteVisitRecord(visitId, patientId, status, patientName) {
+  if (currentRole !== "doctor") return;
+  const confirmed = confirm(`حذف مراجعة "${patientName}" نهائياً؟ هذا الإجراء ما ينرجع.`);
+  if (!confirmed) return;
+  try {
+    await deleteDoc(doc(db, "clinics", clinicId, "visits", visitId));
+    // إذا كانت الزيارة مكتملة، نصحح عداد زيارات المريض حتى تضل شارة "مراجع سابق" دقيقة
+    if (status === "done" && patientId) {
+      const patientRecord = allPatients.find((p) => p.id === patientId);
+      if (patientRecord && (patientRecord.visitsCount || 0) > 0) {
+        await updateDoc(doc(db, "clinics", clinicId, "patients", patientId), {
+          visitsCount: patientRecord.visitsCount - 1
+        });
+      }
+    }
+  } catch (err) {
+    alert("صار خطأ أثناء حذف المراجعة");
+    console.error("deleteVisitRecord failed", err);
   }
 }
 
