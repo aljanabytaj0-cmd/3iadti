@@ -1,7 +1,7 @@
 import {
   auth, db, guardDeveloperPage, signOut,
-  doc, setDoc, updateDoc, collection, query, orderBy, onSnapshot, serverTimestamp,
-  createAuthUserWithoutSignOut, showError, clearError
+  doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, orderBy, onSnapshot, serverTimestamp,
+  createAuthUserWithoutSignOut, sendPasswordResetEmail, showError, clearError
 } from "./core.js";
 
 const clinicsBody   = document.getElementById("clinicsBody");
@@ -10,6 +10,7 @@ const statTotal     = document.getElementById("statTotal");
 const statActive    = document.getElementById("statActive");
 const statInactive  = document.getElementById("statInactive");
 const sideUserName  = document.getElementById("sideUserName");
+const searchInput   = document.getElementById("clinicSearchInput");
 
 const addModal       = document.getElementById("addModal");
 const openAddBtn     = document.getElementById("openAddBtn");
@@ -19,7 +20,17 @@ const addForm        = document.getElementById("addForm");
 const addErrBox      = document.getElementById("addErrBox");
 const submitAddBtn   = document.getElementById("submitAddBtn");
 
+const editModal        = document.getElementById("editModal");
+const closeEditModalBtn = document.getElementById("closeEditModalBtn");
+const cancelEditBtn     = document.getElementById("cancelEditBtn");
+const editForm          = document.getElementById("editForm");
+const editErrBox        = document.getElementById("editErrBox");
+const submitEditBtn     = document.getElementById("submitEditBtn");
+const resetPwMsgBox     = document.getElementById("resetPwMsgBox");
+
 let currentDevUid = null;
+let allClinics = [];       // آخر نسخة من قائمة العيادات (للفلترة بدون إعادة استعلام)
+let editingClinic = null;  // العيادة المفتوحة حالياً بنافذة التعديل
 
 // ---------- حماية الصفحة ----------
 guardDeveloperPage((user, userDoc) => {
@@ -37,19 +48,33 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
 function listenToClinics() {
   const q = query(collection(db, "clinics"), orderBy("createdAt", "desc"));
   onSnapshot(q, (snap) => {
-    const clinics = [];
-    snap.forEach((d) => clinics.push({ id: d.id, ...d.data() }));
-    renderClinics(clinics);
+    allClinics = [];
+    snap.forEach((d) => allClinics.push({ id: d.id, ...d.data() }));
+    renderClinics();
   });
 }
 
-function renderClinics(clinics) {
+searchInput.addEventListener("input", () => renderClinics());
+
+function renderClinics() {
+  const q = searchInput.value.trim().toLowerCase();
+  const clinics = !q ? allClinics : allClinics.filter((c) => {
+    const haystack = [c.doctorName, c.specialty, c.secretaryName, c.phone, c.doctorEmail, c.secretaryEmail]
+      .map((v) => (v || "").toLowerCase()).join(" ");
+    return haystack.includes(q);
+  });
+
   clinicsBody.innerHTML = "";
   emptyState.style.display = clinics.length === 0 ? "block" : "none";
+  if (clinics.length === 0 && q) {
+    emptyState.textContent = "ما فيه نتائج مطابقة لبحثك";
+  } else {
+    emptyState.textContent = 'ما فيه عيادات مسجّلة لحد الآن — اضغط "إضافة طبيب جديد" لبدء أول حساب';
+  }
 
-  statTotal.textContent = clinics.length;
-  statActive.textContent = clinics.filter(c => c.active).length;
-  statInactive.textContent = clinics.filter(c => !c.active).length;
+  statTotal.textContent = allClinics.length;
+  statActive.textContent = allClinics.filter(c => c.active).length;
+  statInactive.textContent = allClinics.filter(c => !c.active).length;
 
   clinics.forEach((c) => {
     const tr = document.createElement("tr");
@@ -70,9 +95,12 @@ function renderClinics(clinics) {
         </span>
       </td>
       <td>
-        <button class="btn ${c.active ? "btn-danger-ghost" : "btn-teal-ghost"} toggle-btn" data-id="${c.id}" data-active="${c.active}">
-          ${c.active ? "تعطيل" : "تفعيل"}
-        </button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn ${c.active ? "btn-danger-ghost" : "btn-teal-ghost"} toggle-btn" data-id="${c.id}" data-active="${c.active}">
+            ${c.active ? "تعطيل" : "تفعيل"}
+          </button>
+          <button class="btn btn-outline edit-btn" data-id="${c.id}">تعديل</button>
+        </div>
       </td>
     `;
     clinicsBody.appendChild(tr);
@@ -91,6 +119,10 @@ function renderClinics(clinics) {
         btn.disabled = false;
       }
     });
+  });
+
+  document.querySelectorAll(".edit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => openEditModal(btn.dataset.id));
   });
 }
 
@@ -173,3 +205,123 @@ function translateError(err) {
   if (code === "auth/invalid-email") return "صيغة البريد الإلكتروني غير صحيحة";
   return "صار خطأ أثناء إنشاء الحساب، تأكد من البيانات وحاول مرة ثانية";
 }
+
+/* =====================================================================
+   نافذة تعديل بيانات العيادة — تعديل، إعادة تعيين كلمة مرور، حذف نهائي
+   ===================================================================== */
+
+function openEditModal(clinicId) {
+  const c = allClinics.find((x) => x.id === clinicId);
+  if (!c) return;
+  editingClinic = c;
+
+  clearError(editErrBox);
+  resetPwMsgBox.textContent = "";
+  resetPwMsgBox.classList.remove("visible");
+
+  document.getElementById("editDoctorName").value = c.doctorName || "";
+  document.getElementById("editSpecialty").value = c.specialty || "";
+  document.getElementById("editPhone").value = c.phone || "";
+  document.getElementById("editSecretaryName").value = c.secretaryName || "";
+
+  editModal.classList.add("open");
+}
+
+function closeEditModal() {
+  editModal.classList.remove("open");
+  editingClinic = null;
+  editForm.reset();
+  clearError(editErrBox);
+}
+closeEditModalBtn.addEventListener("click", closeEditModal);
+cancelEditBtn.addEventListener("click", closeEditModal);
+editModal.addEventListener("click", (e) => { if (e.target === editModal) closeEditModal(); });
+
+editForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!editingClinic) return;
+  clearError(editErrBox);
+
+  const doctorName = document.getElementById("editDoctorName").value.trim();
+  const specialty = document.getElementById("editSpecialty").value.trim();
+  const phone = document.getElementById("editPhone").value.trim();
+  const secretaryName = document.getElementById("editSecretaryName").value.trim();
+
+  submitEditBtn.disabled = true;
+  submitEditBtn.textContent = "جارِ الحفظ...";
+  try {
+    // تحديث مستند العيادة
+    await updateDoc(doc(db, "clinics", editingClinic.id), {
+      doctorName, specialty, phone, secretaryName
+    });
+    // مزامنة الاسمين بمستندات users حتى تنعكس فوراً بلوحة العيادة (اسم الطبيب/السكرتيرة بالشريط الجانبي)
+    if (editingClinic.doctorUid) {
+      await updateDoc(doc(db, "users", editingClinic.doctorUid), { name: doctorName });
+    }
+    if (editingClinic.secretaryUid) {
+      await updateDoc(doc(db, "users", editingClinic.secretaryUid), { name: secretaryName });
+    }
+    closeEditModal();
+  } catch (err) {
+    showError(editErrBox, "صار خطأ أثناء حفظ التعديلات، حاول مرة ثانية");
+  } finally {
+    submitEditBtn.disabled = false;
+    submitEditBtn.textContent = "حفظ التعديلات";
+  }
+});
+
+// ---------- إرسال رابط إعادة تعيين كلمة المرور ----------
+document.getElementById("resetDoctorPwBtn").addEventListener("click", () => sendResetLink("doctor"));
+document.getElementById("resetSecretaryPwBtn").addEventListener("click", () => sendResetLink("secretary"));
+
+async function sendResetLink(who) {
+  if (!editingClinic) return;
+  const email = who === "doctor" ? editingClinic.doctorEmail : editingClinic.secretaryEmail;
+  const label = who === "doctor" ? "الطبيب" : "السكرتيرة";
+  if (!email) return;
+
+  resetPwMsgBox.classList.remove("visible");
+  try {
+    await sendPasswordResetEmail(auth, email);
+    resetPwMsgBox.textContent = `تم إرسال رابط إعادة تعيين كلمة المرور لبريد ${label} (${email})`;
+    resetPwMsgBox.style.background = "var(--teal-light)";
+    resetPwMsgBox.style.color = "var(--teal)";
+    resetPwMsgBox.classList.add("visible");
+  } catch (err) {
+    resetPwMsgBox.textContent = `تعذّر إرسال الرابط لبريد ${label} — تأكد من صحة البريد المسجّل`;
+    resetPwMsgBox.style.background = "var(--danger-light)";
+    resetPwMsgBox.style.color = "var(--danger)";
+    resetPwMsgBox.classList.add("visible");
+  }
+}
+
+// ---------- حذف العيادة نهائياً ----------
+document.getElementById("deleteClinicBtn").addEventListener("click", async () => {
+  if (!editingClinic) return;
+  const confirmed = confirm(
+    `حذف عيادة الدكتور "${editingClinic.doctorName}" نهائياً؟\n` +
+    `راح ينحذف حساب الدخول (الطبيب والسكرتيرة) وبيانات العيادة من القائمة، وهذا الإجراء ما ينرجع.\n` +
+    `(بيانات المرضى والزيارات القديمة تضل محفوظة بقاعدة البيانات لكنها تصير غير قابلة للوصول من أي حد)`
+  );
+  if (!confirmed) return;
+
+  const btn = document.getElementById("deleteClinicBtn");
+  btn.disabled = true;
+  btn.textContent = "جارِ الحذف...";
+  try {
+    await deleteDoc(doc(db, "clinics", editingClinic.id));
+    if (editingClinic.doctorUid) {
+      await deleteDoc(doc(db, "users", editingClinic.doctorUid));
+    }
+    if (editingClinic.secretaryUid) {
+      await deleteDoc(doc(db, "users", editingClinic.secretaryUid));
+    }
+    closeEditModal();
+  } catch (err) {
+    alert("صار خطأ أثناء حذف العيادة، حاول مرة ثانية");
+    console.error("deleteClinicBtn failed", err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "حذف هذه العيادة نهائياً";
+  }
+});
