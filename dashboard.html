@@ -50,6 +50,10 @@
       </div>
     </div>
 
+    <div class="field" style="max-width:340px; margin-bottom:18px;">
+      <input type="text" id="clinicSearchInput" placeholder="ابحث باسم الطبيب، السكرتيرة، الهاتف، أو التخصص...">
+    </div>
+
     <div class="panel">
       <div class="panel-head">
         <h2>قائمة الأطباء</h2>
@@ -63,7 +67,7 @@
               <th>السكرتيرة</th>
               <th>الهاتف</th>
               <th>الحالة</th>
-              <th>إجراء</th>
+              <th>إجراءات</th>
             </tr>
           </thead>
           <tbody id="clinicsBody">
@@ -133,6 +137,59 @@
       <div class="modal-foot">
         <button type="submit" class="btn btn-teal" id="submitAddBtn">إنشاء الحسابات</button>
         <button type="button" class="btn btn-outline" id="cancelAddBtn">إلغاء</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- نافذة تعديل بيانات عيادة -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>تعديل بيانات العيادة</h3>
+      <button class="modal-close" id="closeEditModalBtn">&times;</button>
+    </div>
+    <form id="editForm">
+      <div class="modal-body">
+        <div class="error-msg" id="editErrBox"></div>
+
+        <div class="form-grid">
+          <div class="section-divider">بيانات العيادة</div>
+          <div class="field full">
+            <label>اسم الطبيب</label>
+            <input type="text" id="editDoctorName" required>
+          </div>
+          <div class="field">
+            <label>التخصص</label>
+            <input type="text" id="editSpecialty" required>
+          </div>
+          <div class="field">
+            <label>رقم الهاتف</label>
+            <input type="tel" id="editPhone" required>
+          </div>
+          <div class="field full">
+            <label>اسم السكرتيرة</label>
+            <input type="text" id="editSecretaryName" required>
+          </div>
+        </div>
+
+        <div class="section-divider" style="margin-top:18px;">كلمات المرور</div>
+        <p style="font-size:12.5px; color:var(--ink-soft); margin:6px 0 12px;">
+          ما نقدر نفرض كلمة سر جديدة مباشرة لأسباب أمنية بفايربيس — بدل هذا نبعث للطبيب/السكرتيرة رابط رسمي يحطون بيه كلمة سر جديدة بنفسهم.
+        </p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-outline" id="resetDoctorPwBtn">رابط كلمة سر الطبيب</button>
+          <button type="button" class="btn btn-outline" id="resetSecretaryPwBtn">رابط كلمة سر السكرتيرة</button>
+        </div>
+        <div class="error-msg" id="resetPwMsgBox" style="margin-top:12px;"></div>
+
+        <div style="margin-top:22px; padding-top:16px; border-top:1px solid var(--line);">
+          <button type="button" class="btn btn-danger-ghost" id="deleteClinicBtn">حذف هذه العيادة نهائياً</button>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="submit" class="btn btn-teal" id="submitEditBtn">حفظ التعديلات</button>
+        <button type="button" class="btn btn-outline" id="cancelEditBtn">إلغاء</button>
       </div>
     </form>
   </div>
