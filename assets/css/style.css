@@ -397,11 +397,67 @@ tbody tr:hover{ background:#FAFCFC; }
 .expense-del-btn:hover{ filter:brightness(.95); }
 
 @media (max-width: 760px){
+  /* ---- الهيكل العام ---- */
   .shell{ flex-direction:column; }
-  .sidebar{ width:100%; flex-direction:row; align-items:center; padding:14px 16px; }
-  .brand{ margin-bottom:0; }
+  .sidebar{
+    width:100%; flex-direction:column; align-items:stretch;
+    padding:12px 14px; gap:10px;
+  }
+  .sidebar .brand{ margin-bottom:0; }
   .side-user, .side-label{ display:none; }
-  .side-logout{ margin-inline-start:auto; margin-top:0; width:auto; }
-  .main{ padding:20px 16px; }
+  .side-logout{ margin-inline-start:0; margin-top:0; width:auto; padding:8px 14px; font-size:12.5px; align-self:flex-start; }
+  .main{ padding:16px 14px; }
   .form-grid{ grid-template-columns:1fr; }
+
+  /* ---- تبويبات لوحة العيادة: شريط أفقي قابل للتمرير بدل عمود ---- */
+  .side-nav{
+    flex-direction:row; overflow-x:auto; gap:6px; margin-bottom:0;
+    padding-bottom:4px; -webkit-overflow-scrolling:touch; scrollbar-width:none;
+  }
+  .side-nav::-webkit-scrollbar{ display:none; }
+  .side-tab{
+    white-space:nowrap; flex-shrink:0; padding:9px 15px; font-size:12.5px;
+  }
+
+  /* ---- عناوين الصفحات وأزرار الرأس ---- */
+  .page-head{ margin-bottom:18px; }
+  .page-head h1{ font-size:19px; }
+  .page-head p{ font-size:12.5px; }
+  .page-head .btn{ padding:9px 14px; font-size:12.5px; }
+
+  /* ---- بطاقات الإحصائيات: عمودين بدل التفاف عشوائي ---- */
+  .stats-row{ gap:10px; }
+  .stat-card{ min-width:calc(50% - 5px); padding:12px 14px; }
+  .stat-num{ font-size:20px; }
+  .stat-label{ font-size:11.5px; }
+
+  /* ---- رأس اللوحة داخل البانل (بحث + تصفح شهر) يصير عمودي ---- */
+  .panel-head{ flex-direction:column; align-items:flex-start; gap:10px; }
+  .panel-head > div{ width:100%; }
+  #allVisitsSearchInput{ width:100% !important; }
+
+  /* ---- الجداول: حشوة أصغر حتى ما تفيض عرضياً ---- */
+  thead th, tbody td{ padding:9px 10px; font-size:11.5px; }
+
+  /* ---- النوافذ المنبثقة: مساحة أكبر مستغلة، بدون تفريغ زايد بالأعلى ---- */
+  .modal-overlay{ padding:14px 8px; }
+  .modal, .modal-wide{ max-width:100%; }
+  .modal-body{ padding:16px; }
+  .modal-foot{ padding:12px 16px 16px; flex-wrap:wrap; }
+  .modal-head{ padding:16px; }
+
+  /* ---- ملف المريض: بياناته الأساسية بعمود وحد ---- */
+  .patient-basic-info{ grid-template-columns:1fr; }
+
+  /* ---- صف الطابور: الاسم أعلى، الأزرار بصف مستقل تحته ---- */
+  .queue-item{ flex-wrap:wrap; padding:12px 14px; gap:10px; }
+  .queue-actions{ flex-basis:100%; justify-content:flex-end; }
+
+  /* ---- صفوف المرضى والصرفيات ---- */
+  .patient-row{ padding:12px 14px; }
+  .expense-row{ padding:12px 14px; flex-wrap:wrap; gap:8px; }
+}
+
+@media (max-width: 400px){
+  .stat-card{ min-width:100%; }
 }
