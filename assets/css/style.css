@@ -342,6 +342,44 @@ tbody tr:hover{ background:#FAFCFC; }
 }
 .patient-del-btn:hover{ filter:brightness(.95); }
 
+/* ---------- شبكة المرفقات الطبية ---------- */
+.attachments-grid{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr));
+  gap:10px; margin-bottom:6px;
+}
+.attachment-thumb{
+  width:100%; aspect-ratio:1; object-fit:cover; border-radius:9px;
+  border:1.5px solid var(--line); cursor:pointer; transition:transform .12s, border-color .12s;
+}
+.attachment-thumb:hover{ border-color:var(--teal); transform:scale(1.03); }
+
+/* ---------- رأس الطباعة (يظهر فقط عند التصدير/الطباعة) ---------- */
+.print-header{ display:none; }
+
+/* ---------- زر تعديل المبلغ الصغير ---------- */
+.fee-edit-btn{
+  background:none; border:none; color:var(--teal); cursor:pointer;
+  font-size:12px; font-weight:700; padding:0; margin-inline-start:6px;
+  text-decoration:underline;
+}
+.fee-edit-btn:hover{ color:var(--navy); }
+
+@media print{
+  .sidebar, .btn, .empty-state, .fee-edit-btn{ display:none !important; }
+  .print-header{
+    display:block !important;
+    text-align:center; margin-bottom:22px; padding-bottom:14px;
+    border-bottom:2px solid var(--navy);
+  }
+  .print-header h2{ margin:0 0 4px; font-size:19px; }
+  .print-header p{ margin:0; color:var(--ink-soft); font-size:13px; }
+  .main{ padding:0; max-width:100%; }
+  .shell{ display:block; }
+  .panel{ box-shadow:none; border:1px solid #ccc; break-inside:avoid; margin-bottom:16px; }
+  .stat-card{ box-shadow:none; border:1px solid #ccc; }
+  body{ background:#fff; }
+}
+
 /* ---------- صفوف الصرفيات الشهرية ---------- */
 .expense-row{
   display:flex; align-items:center; justify-content:space-between;
