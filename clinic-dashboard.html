@@ -18,6 +18,7 @@
     <nav class="side-nav">
       <button class="side-tab active" data-tab="today">جدول اليوم</button>
       <button class="side-tab" data-tab="patients">سجل المرضى</button>
+      <button class="side-tab" data-tab="allvisits">كل المراجعات</button>
       <button class="side-tab" data-tab="finance">الحسابات المالية</button>
     </nav>
 
@@ -145,6 +146,40 @@
         <div id="expensesList"></div>
         <div class="empty-state" id="expensesEmpty" style="display:none;">
           ما فيه صرفيات مسجّلة لهذا الشهر
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== تبويب كل المراجعات ===== -->
+    <section id="tab-allvisits" class="tab-panel" style="display:none;">
+      <div class="page-head">
+        <div>
+          <h1>كل المراجعات</h1>
+          <p>سجل شامل لكل زيارة بالعيادة، قابل للبحث والتصفح حسب الشهر</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:22px;">
+        <div class="panel-head"><h2>مراجعين اليوم</h2></div>
+        <div id="todaySummaryList"></div>
+        <div class="empty-state" id="todaySummaryEmpty" style="display:none;">
+          ما فيه مراجعين مسجّلين اليوم لحد الآن
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head" style="flex-wrap:wrap; gap:12px;">
+          <h2>كل المراجعات</h2>
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <input type="text" id="allVisitsSearchInput" placeholder="ابحث بالاسم أو الهاتف..." style="width:220px; padding:9px 12px; border:1.5px solid var(--line); border-radius:9px; font-family:'Cairo',sans-serif; font-size:13.5px; background:#FBFCFC;">
+            <button class="btn btn-outline" id="allVisitsPrevMonthBtn">‹</button>
+            <span id="allVisitsMonthLabel" style="font-weight:700; font-size:13.5px; min-width:110px; text-align:center; display:inline-block;">—</span>
+            <button class="btn btn-outline" id="allVisitsNextMonthBtn">›</button>
+          </div>
+        </div>
+        <div id="allVisitsList"></div>
+        <div class="empty-state" id="allVisitsEmpty" style="display:none;">
+          ما فيه مراجعات بهذا الشهر
         </div>
       </div>
     </section>
