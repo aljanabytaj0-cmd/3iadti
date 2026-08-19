@@ -275,6 +275,23 @@
       </div>
       <button class="btn btn-outline" id="saveGeneralStatusBtn" style="margin-top:6px;">حفظ الحالة الطبية العامة</button>
 
+      <div class="section-divider" style="margin-top:22px;">المرفقات الطبية (صور علاجات، وصفات، فحوصات)</div>
+      <div style="display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+        <label class="btn btn-outline" style="cursor:pointer; margin:0;">
+          📷 التقاط صورة
+          <input type="file" id="attachCameraInput" accept="image/*" capture="environment" style="display:none;">
+        </label>
+        <label class="btn btn-outline" style="cursor:pointer; margin:0;">
+          📁 رفع من الجهاز
+          <input type="file" id="attachUploadInput" accept="image/*" style="display:none;">
+        </label>
+        <span id="attachUploadingLabel" style="display:none; font-size:12.5px; color:var(--ink-soft); align-self:center;">جارِ رفع الصورة...</span>
+      </div>
+      <div id="attachmentsGrid" class="attachments-grid"></div>
+      <div class="empty-state" id="attachmentsEmpty" style="display:none; padding:16px;">
+        ما فيه صور مرفقة لهذا المريض بعد
+      </div>
+
       <div id="diagnosisSection">
         <div class="section-divider" style="margin-top:22px;">إتمام الاستشارة الحالية</div>
         <div class="form-grid">
@@ -375,6 +392,21 @@
         <button type="button" class="btn btn-outline" id="cancelExpenseBtn">إلغاء</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ===== نافذة عرض مرفق طبي ===== -->
+<div class="modal-overlay" id="attachmentViewModal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-head">
+      <h3>عرض المرفق</h3>
+      <button class="modal-close" id="closeAttachmentViewBtn">&times;</button>
+    </div>
+    <div class="modal-body" style="text-align:center;">
+      <img id="attachmentViewImg" style="max-width:100%; border-radius:10px; border:1px solid var(--line);">
+      <div id="attachmentViewMeta" style="font-size:12px; color:var(--ink-soft); margin-top:10px;"></div>
+      <button class="btn btn-danger-ghost" id="deleteAttachmentBtn" style="margin-top:16px;">حذف هذا المرفق نهائياً</button>
+    </div>
   </div>
 </div>
 
