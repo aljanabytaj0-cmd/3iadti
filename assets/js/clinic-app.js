@@ -22,6 +22,11 @@ let financeMonthExpenses = [];
 let unsubFinanceVisits = null;
 let unsubFinanceExpenses = null;
 
+// ---- حالة تبويب كل المراجعات ----
+let allVisitsMonthDate = startOfMonth(new Date());
+let allVisitsMonthData = [];
+let unsubAllVisits = null;
+
 const todayStr = formatDate(new Date());
 
 // ---------------- حماية الصفحة + بدء التشغيل ----------------
@@ -46,6 +51,8 @@ function applyRolePermissions() {
     if (patientsTabBtn) patientsTabBtn.style.display = "none";
     const financeTabBtn = document.querySelector('.side-tab[data-tab="finance"]');
     if (financeTabBtn) financeTabBtn.style.display = "none";
+    const allVisitsTabBtn = document.querySelector('.side-tab[data-tab="allvisits"]');
+    if (allVisitsTabBtn) allVisitsTabBtn.style.display = "none";
   }
 }
 
@@ -72,8 +79,13 @@ document.querySelectorAll(".side-tab").forEach((btn) => {
     const tab = btn.dataset.tab;
     document.getElementById("tab-today").style.display = tab === "today" ? "block" : "none";
     document.getElementById("tab-patients").style.display = tab === "patients" ? "block" : "none";
+    document.getElementById("tab-allvisits").style.display = tab === "allvisits" ? "block" : "none";
     document.getElementById("tab-finance").style.display = tab === "finance" ? "block" : "none";
     if (tab === "patients") renderPatientsList();
+    if (tab === "allvisits" && currentRole === "doctor") {
+      renderTodaySummary();
+      listenAllVisitsMonth();
+    }
     if (tab === "finance" && currentRole === "doctor") listenFinanceMonth();
   });
 });
@@ -294,6 +306,7 @@ function renderQueue() {
       deleteVisitRecord(btn.dataset.id, btn.dataset.pid, btn.dataset.status, btn.dataset.name);
     });
   });
+  renderTodaySummary();
 }
 
 /* =====================================================================
@@ -646,6 +659,101 @@ async function loadVisitHistory(patientId) {
 
   wrap.querySelectorAll(".fee-edit-btn").forEach((btn) => {
     btn.addEventListener("click", () => editVisitFee(btn.dataset.id, Number(btn.dataset.fee)));
+  });
+}
+
+/* =====================================================================
+   كل المراجعات — لمحة سريعة عن اليوم + سجل كامل قابل للبحث والتصفح
+   ===================================================================== */
+
+// لمحة "مراجعين اليوم" — تُبنى من نفس todayVisits المُحمّلة أصلاً بجدول اليوم،
+// بدون أي استعلام إضافي لقاعدة البيانات
+function renderTodaySummary() {
+  const wrap = document.getElementById("todaySummaryList");
+  const empty = document.getElementById("todaySummaryEmpty");
+  if (!wrap) return;
+
+  wrap.innerHTML = "";
+  empty.style.display = todayVisits.length === 0 ? "block" : "none";
+
+  const statusLabel = { waiting: "بالانتظار", in_progress: "جارِ الكشف", done: "تم الكشف" };
+  todayVisits.forEach((v) => {
+    const row = document.createElement("div");
+    row.className = "expense-row";
+    row.style.cursor = "pointer";
+    row.innerHTML = `
+      <div>
+        <div class="exname">${escapeHtml(v.patientName)}</div>
+        <div class="exmeta">${escapeHtml(v.sortTime || "")} • ${statusLabel[v.status] || v.status}</div>
+      </div>
+      <div class="exright">
+        ${v.fee ? `<span style="font-weight:700; font-size:13.5px;">${Number(v.fee).toLocaleString()} د.ع</span>` : ""}
+      </div>
+    `;
+    row.addEventListener("click", () => openPatientModal(v.patientId, v.id, v.status));
+    wrap.appendChild(row);
+  });
+}
+
+document.getElementById("allVisitsPrevMonthBtn").addEventListener("click", () => {
+  allVisitsMonthDate = new Date(allVisitsMonthDate.getFullYear(), allVisitsMonthDate.getMonth() - 1, 1);
+  listenAllVisitsMonth();
+});
+document.getElementById("allVisitsNextMonthBtn").addEventListener("click", () => {
+  allVisitsMonthDate = new Date(allVisitsMonthDate.getFullYear(), allVisitsMonthDate.getMonth() + 1, 1);
+  listenAllVisitsMonth();
+});
+document.getElementById("allVisitsSearchInput").addEventListener("input", () => renderAllVisitsList());
+
+function listenAllVisitsMonth() {
+  document.getElementById("allVisitsMonthLabel").textContent = monthLabel(allVisitsMonthDate);
+  const { start, end } = monthRangeStrings(allVisitsMonthDate);
+
+  if (unsubAllVisits) unsubAllVisits();
+
+  const q = query(
+    collection(db, "clinics", clinicId, "visits"),
+    where("date", ">=", start),
+    where("date", "<=", end),
+    orderBy("date", "desc")
+  );
+  unsubAllVisits = onSnapshot(q, (snap) => {
+    allVisitsMonthData = [];
+    snap.forEach((d) => allVisitsMonthData.push({ id: d.id, ...d.data() }));
+    // ترتيب ثانوي بالوقت داخل نفس اليوم (الأحدث أولاً) بدون الحاجة لفهرس مركّب إضافي
+    allVisitsMonthData.sort((a, b) => (a.date === b.date ? (b.sortTime || "").localeCompare(a.sortTime || "") : 0));
+    renderAllVisitsList();
+  });
+}
+
+function renderAllVisitsList() {
+  const wrap = document.getElementById("allVisitsList");
+  const empty = document.getElementById("allVisitsEmpty");
+  const statusLabel = { waiting: "بالانتظار", in_progress: "جارِ الكشف", done: "تم الكشف", cancelled: "ملغاة" };
+
+  const q = document.getElementById("allVisitsSearchInput").value.trim().toLowerCase();
+  const filtered = !q ? allVisitsMonthData : allVisitsMonthData.filter((v) =>
+    (v.patientName || "").toLowerCase().includes(q) || (v.patientPhone || "").includes(q)
+  );
+
+  wrap.innerHTML = "";
+  empty.style.display = filtered.length === 0 ? "block" : "none";
+
+  filtered.forEach((v) => {
+    const row = document.createElement("div");
+    row.className = "expense-row";
+    row.style.cursor = "pointer";
+    row.innerHTML = `
+      <div>
+        <div class="exname">${escapeHtml(v.patientName)}</div>
+        <div class="exmeta">${escapeHtml(v.date)} — ${escapeHtml(v.sortTime || "")} • ${escapeHtml(v.patientPhone || "")} • ${statusLabel[v.status] || v.status}</div>
+      </div>
+      <div class="exright">
+        ${v.fee ? `<span style="font-weight:700; font-size:13.5px;">${Number(v.fee).toLocaleString()} د.ع</span>` : ""}
+      </div>
+    `;
+    row.addEventListener("click", () => openPatientModal(v.patientId, v.id, v.status));
+    wrap.appendChild(row);
   });
 }
 
