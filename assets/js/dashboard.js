@@ -1,7 +1,7 @@
 import {
   auth, db, guardDeveloperPage, signOut,
   doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, orderBy, onSnapshot, serverTimestamp,
-  createAuthUserWithoutSignOut, sendPasswordResetEmail, showError, clearError
+  getDocs, createAuthUserWithoutSignOut, deleteAuthUserWithoutSignOut, sendPasswordResetEmail, showError, clearError
 } from "./core.js";
 
 const clinicsBody   = document.getElementById("clinicsBody");
@@ -160,16 +160,18 @@ addForm.addEventListener("submit", async (e) => {
   submitAddBtn.disabled = true;
   submitAddBtn.textContent = "جارِ الإنشاء...";
 
-  try {
-    // 1) إنشاء حساب الدخول للطبيب والسكرتيرة (بدون تسجيل خروج المطوّر)
-    const doctorUid    = await createAuthUserWithoutSignOut(doctorEmail, doctorPassword);
-    const secretaryUid = await createAuthUserWithoutSignOut(secretaryEmail, secretaryPassword);
+  // نتتبع كل خطوة نجحت حتى نقدر نتراجع عنها كاملة لو فشلت خطوة لاحقة —
+  // بدون هذا، فشل جزئي يخلّي حساب Auth معلّق بدون عيادة مرتبطة (يتيم) للأبد
+  let doctorUid = null, secretaryUid = null, clinicRef = null;
+  let clinicDocWritten = false, doctorUserWritten = false, secretaryUserWritten = false;
 
-    // 2) توليد معرّف عيادة فريد (clinicId) — هذا هو أساس العزل بين الحسابات
-    const clinicRef = doc(collection(db, "clinics"));
+  try {
+    doctorUid = await createAuthUserWithoutSignOut(doctorEmail, doctorPassword);
+    secretaryUid = await createAuthUserWithoutSignOut(secretaryEmail, secretaryPassword);
+
+    clinicRef = doc(collection(db, "clinics"));
     const clinicId = clinicRef.id;
 
-    // 3) حفظ مستند العيادة
     await setDoc(clinicRef, {
       doctorName, specialty, phone,
       doctorEmail, doctorUid,
@@ -178,19 +180,32 @@ addForm.addEventListener("submit", async (e) => {
       createdBy: currentDevUid,
       createdAt: serverTimestamp()
     });
+    clinicDocWritten = true;
 
-    // 4) حفظ مستندات المستخدمين (تُستخدم في قواعد الأمان وتحديد الصلاحيات)
     await setDoc(doc(db, "users", doctorUid), {
       role: "doctor", clinicId, name: doctorName, email: doctorEmail,
       active: true, createdAt: serverTimestamp()
     });
+    doctorUserWritten = true;
+
     await setDoc(doc(db, "users", secretaryUid), {
       role: "secretary", clinicId, name: secretaryName, email: secretaryEmail,
       active: true, createdAt: serverTimestamp()
     });
+    secretaryUserWritten = true;
 
     closeModal();
   } catch (err) {
+    // تراجع كامل بعكس الترتيب عن كل خطوة نجحت لحد الآن
+    try {
+      if (secretaryUserWritten) await deleteDoc(doc(db, "users", secretaryUid));
+      if (doctorUserWritten) await deleteDoc(doc(db, "users", doctorUid));
+      if (clinicDocWritten) await deleteDoc(clinicRef);
+      if (secretaryUid) await deleteAuthUserWithoutSignOut(secretaryEmail, secretaryPassword);
+      if (doctorUid) await deleteAuthUserWithoutSignOut(doctorEmail, doctorPassword);
+    } catch (rollbackErr) {
+      console.error("rollback failed", rollbackErr);
+    }
     showError(addErrBox, translateError(err));
   } finally {
     submitAddBtn.disabled = false;
@@ -295,20 +310,37 @@ async function sendResetLink(who) {
   }
 }
 
-// ---------- حذف العيادة نهائياً ----------
+// مسح كل مستندات مجموعة فرعية معينة داخل عيادة (patients / visits / expenses / counters)
+async function deleteSubcollection(clinicId, subName) {
+  const snap = await getDocs(collection(db, "clinics", clinicId, subName));
+  const deletions = [];
+  snap.forEach((d) => deletions.push(deleteDoc(d.ref)));
+  await Promise.all(deletions);
+}
+
+// ---------- حذف العيادة نهائياً (حذف شامل حقيقي) ----------
 document.getElementById("deleteClinicBtn").addEventListener("click", async () => {
   if (!editingClinic) return;
   const confirmed = confirm(
     `حذف عيادة الدكتور "${editingClinic.doctorName}" نهائياً؟\n` +
-    `راح ينحذف حساب الدخول (الطبيب والسكرتيرة) وبيانات العيادة من القائمة، وهذا الإجراء ما ينرجع.\n` +
-    `(بيانات المرضى والزيارات القديمة تضل محفوظة بقاعدة البيانات لكنها تصير غير قابلة للوصول من أي حد)`
+    `راح ينحذف: حساب الدخول (الطبيب والسكرتيرة)، وكل بيانات المرضى، وكل سجل الزيارات، وكل الصرفيات المسجّلة لهذي العيادة بالكامل من قاعدة البيانات.\n` +
+    `هذا الإجراء ما ينرجع نهائياً ولا يوجد نسخة احتياطية.`
   );
   if (!confirmed) return;
 
   const btn = document.getElementById("deleteClinicBtn");
   btn.disabled = true;
-  btn.textContent = "جارِ الحذف...";
   try {
+    btn.textContent = "جارِ مسح بيانات المرضى...";
+    await deleteSubcollection(editingClinic.id, "patients");
+    btn.textContent = "جارِ مسح سجل الزيارات...";
+    await deleteSubcollection(editingClinic.id, "visits");
+    btn.textContent = "جارِ مسح الصرفيات...";
+    await deleteSubcollection(editingClinic.id, "expenses");
+    btn.textContent = "جارِ مسح عدادات الطابور...";
+    await deleteSubcollection(editingClinic.id, "counters");
+
+    btn.textContent = "جارِ حذف الحسابات...";
     await deleteDoc(doc(db, "clinics", editingClinic.id));
     if (editingClinic.doctorUid) {
       await deleteDoc(doc(db, "users", editingClinic.doctorUid));
