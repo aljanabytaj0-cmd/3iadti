@@ -1,12 +1,13 @@
 import {
   auth, db, guardClinicPage, signOut,
   doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, query, where, orderBy,
-  getDocs, onSnapshot, runTransaction, serverTimestamp,
+  getDocs, onSnapshot, runTransaction, serverTimestamp, increment,
   showError, clearError
 } from "./core.js";
 
 let clinicId = null;
 let currentRole = null;
+let currentUid = null;
 let allPatients = [];          // كاش محلي لكل مرضى العيادة
 let todayVisits = [];          // زيارات اليوم (حي)
 let selectedExistingPatientId = null;   // عند اختيار مريض موجود بنافذة تسجيل الزيارة
@@ -27,6 +28,7 @@ const todayStr = formatDate(new Date());
 guardClinicPage((user, userDoc) => {
   clinicId = userDoc.clinicId;
   currentRole = userDoc.role;
+  currentUid = user.uid;
   document.getElementById("sideUserName").textContent = userDoc.name || user.email;
   document.getElementById("roleBadge").textContent = currentRole === "doctor" ? "طبيب" : "سكرتيرة";
   document.getElementById("todayDateLabel").textContent = "تاريخ اليوم: " + todayStr;
@@ -52,10 +54,13 @@ document.getElementById("logoutBtn").addEventListener("click", async () => {
   window.location.href = "clinic-login.html";
 });
 
+let clinicDoctorName = "";
+
 async function loadClinicName() {
   const snap = await getDoc(doc(db, "clinics", clinicId));
   if (snap.exists()) {
-    document.getElementById("clinicNameLabel").textContent = "عيادة " + (snap.data().doctorName || "");
+    clinicDoctorName = snap.data().doctorName || "";
+    document.getElementById("clinicNameLabel").textContent = "عيادة " + clinicDoctorName;
   }
 }
 
@@ -245,7 +250,7 @@ function renderQueue() {
       : "";
 
     row.innerHTML = `
-      <div class="queue-num">${v.sortTime || "--:--"}</div>
+      <div class="queue-num">${escapeHtml(v.sortTime || "--:--")}</div>
       <div class="queue-info">
         <div class="qname ${isDoctor ? "clickable-name" : ""}" ${isDoctor ? `data-pid="${v.patientId}" data-vid="${v.id}" data-status="${v.status}"` : ""}>${escapeHtml(v.patientName)}
           <span class="type-badge ${v.visitType === "appointment" ? "appt" : "walkin"}">
@@ -253,7 +258,7 @@ function renderQueue() {
           </span>
           ${visitBadge}
         </div>
-        <div class="qmeta">${escapeHtml(v.patientPhone || "")} • ${statusLabel}${v.fee ? " • " + Number(v.fee).toLocaleString() + " د.ع" : ""}</div>
+        <div class="qmeta">${escapeHtml(v.patientPhone || "")} • ${statusLabel}${v.fee ? " • " + Number(v.fee).toLocaleString() + " د.ع" : ""}${isDoctor ? `<button class="fee-edit-btn" data-id="${v.id}" data-fee="${v.fee || 0}">تعديل المبلغ</button>` : ""}</div>
       </div>
       <div class="queue-actions">${actionsHtml}</div>
     `;
@@ -261,6 +266,12 @@ function renderQueue() {
   });
 
   if (currentRole === "doctor") {
+    wrap.querySelectorAll(".fee-edit-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        editVisitFee(btn.dataset.id, Number(btn.dataset.fee));
+      });
+    });
     wrap.querySelectorAll(".clickable-name").forEach((el) => {
       el.addEventListener("click", () => openPatientModal(el.dataset.pid, el.dataset.vid, el.dataset.status));
     });
@@ -493,6 +504,31 @@ async function openPatientModal(patientId, visitId, visitStatus) {
   }
 }
 
+// تعديل مبلغ كشفية بعد تسجيلها — الطبيب فقط. نحتفظ بالمبلغ القديم كسجل تدقيق
+// بدل ما نسمح بالتعديل الصامت، حفاظاً على شفافية السجل المالي
+async function editVisitFee(visitId, currentFee) {
+  if (currentRole !== "doctor") return;
+  const input = prompt("أدخل مبلغ الكشفية الصحيح (د.ع):", currentFee || "");
+  if (input === null) return; // إلغاء
+  const newFee = Number(input);
+  if (isNaN(newFee) || newFee < 0) {
+    alert("لازم تدخل رقم صحيح وموجب");
+    return;
+  }
+  if (newFee === currentFee) return; // ما تغيّر شي
+  try {
+    await updateDoc(doc(db, "clinics", clinicId, "visits", visitId), {
+      fee: newFee,
+      previousFee: currentFee,
+      feeEditedAt: serverTimestamp(),
+      feeEditedBy: currentUid
+    });
+  } catch (err) {
+    alert("صار خطأ أثناء تعديل المبلغ");
+    console.error("editVisitFee failed", err);
+  }
+}
+
 // حذف مراجعة نهائياً — الطبيب فقط. تنحذف فوراً من شاشة السكرتيرة أيضاً
 // لأن القائمة مبنية على onSnapshot حي على نفس مستند الزيارة بقاعدة البيانات
 async function deleteVisitRecord(visitId, patientId, status, patientName) {
@@ -501,14 +537,11 @@ async function deleteVisitRecord(visitId, patientId, status, patientName) {
   if (!confirmed) return;
   try {
     await deleteDoc(doc(db, "clinics", clinicId, "visits", visitId));
-    // إذا كانت الزيارة مكتملة، نصحح عداد زيارات المريض حتى تضل شارة "مراجع سابق" دقيقة
+    // إذا كانت الزيارة مكتملة، نصحح عداد زيارات المريض (إنقاص ذري آمن) حتى تضل شارة "مراجع سابق" دقيقة
     if (status === "done" && patientId) {
-      const patientRecord = allPatients.find((p) => p.id === patientId);
-      if (patientRecord && (patientRecord.visitsCount || 0) > 0) {
-        await updateDoc(doc(db, "clinics", clinicId, "patients", patientId), {
-          visitsCount: patientRecord.visitsCount - 1
-        });
-      }
+      await updateDoc(doc(db, "clinics", clinicId, "patients", patientId), {
+        visitsCount: increment(-1)
+      });
     }
   } catch (err) {
     alert("صار خطأ أثناء حذف المراجعة");
@@ -561,11 +594,9 @@ document.getElementById("saveDiagnosisBtn").addEventListener("click", async () =
       treatment: document.getElementById("currentTreatment").value.trim(),
       status: "done"
     });
-    // 2) زيادة عداد زيارات المريض حتى يظهر "مراجع سابق" بالمرات الجاية
-    const patientRecord = allPatients.find((p) => p.id === currentOpenPatientId);
-    const nextCount = (patientRecord?.visitsCount || 0) + 1;
+    // 2) زيادة عداد زيارات المريض (زيادة ذرية من السيرفر — آمنة حتى مع عمليات متزامنة)
     await updateDoc(doc(db, "clinics", clinicId, "patients", currentOpenPatientId), {
-      visitsCount: nextCount
+      visitsCount: increment(1)
     });
     // 3) إغلاق النافذة — الاستشارة اكتملت والمريض انحفظ بسجل المرضى
     patientModal.classList.remove("open");
@@ -591,7 +622,7 @@ async function loadVisitHistory(patientId) {
   const snap = await getDocs(q);
 
   const items = [];
-  snap.forEach((d) => items.push(d.data()));
+  snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
 
   empty.style.display = items.length === 0 ? "block" : "none";
   items.forEach((v) => {
@@ -605,10 +636,16 @@ async function loadVisitHistory(patientId) {
       ? rows.join("")
       : '<span style="color:var(--ink-soft)">بدون تفاصيل مسجّلة</span>';
     div.innerHTML = `
-      <div class="hdate">${v.date} — ${v.sortTime || ""} ${v.visitType === "appointment" ? "(موعد)" : "(مباشر)"}${v.fee ? " • " + Number(v.fee).toLocaleString() + " د.ع" : ""}</div>
+      <div class="hdate">${escapeHtml(v.date)} — ${escapeHtml(v.sortTime || "")} ${v.visitType === "appointment" ? "(موعد)" : "(مباشر)"}${v.fee ? " • " + Number(v.fee).toLocaleString() + " د.ع" : ""}
+        <button class="fee-edit-btn" data-id="${v.id}" data-fee="${v.fee || 0}">تعديل المبلغ</button>
+      </div>
       <div class="hdiag">${detailsHtml}</div>
     `;
     wrap.appendChild(div);
+  });
+
+  wrap.querySelectorAll(".fee-edit-btn").forEach((btn) => {
+    btn.addEventListener("click", () => editVisitFee(btn.dataset.id, Number(btn.dataset.fee)));
   });
 }
 
@@ -623,6 +660,14 @@ document.getElementById("prevMonthBtn").addEventListener("click", () => {
 document.getElementById("nextMonthBtn").addEventListener("click", () => {
   financeMonthDate = new Date(financeMonthDate.getFullYear(), financeMonthDate.getMonth() + 1, 1);
   listenFinanceMonth();
+});
+
+document.getElementById("exportPdfBtn").addEventListener("click", () => {
+  document.getElementById("printHeader").innerHTML = `
+    <h2>كشف حساب شهري — عيادة ${escapeHtml(clinicDoctorName)}</h2>
+    <p>${monthLabel(financeMonthDate)} — تاريخ الطباعة: ${todayStr}</p>
+  `;
+  window.print();
 });
 
 function listenFinanceMonth() {
@@ -689,7 +734,7 @@ function renderDailyBreakdown(doneVisits) {
   days.forEach((day) => {
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>${day}</td>
+      <td>${escapeHtml(day)}</td>
       <td>${byDay[day].count}</td>
       <td>${money(byDay[day].revenue)}</td>
     `;
@@ -711,7 +756,7 @@ function renderExpensesList() {
     row.innerHTML = `
       <div>
         <div class="exname">${escapeHtml(e.description)}</div>
-        <div class="exmeta">${e.date}</div>
+        <div class="exmeta">${escapeHtml(e.date)}</div>
       </div>
       <div class="exright">
         <span class="examount">${money(e.amount)}</span>
