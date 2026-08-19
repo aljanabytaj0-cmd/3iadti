@@ -27,6 +27,11 @@ let allVisitsMonthDate = startOfMonth(new Date());
 let allVisitsMonthData = [];
 let unsubAllVisits = null;
 
+// ---- حالة المرفقات الطبية بملف المريض ----
+let unsubAttachments = null;
+let currentAttachments = [];
+let viewingAttachmentId = null;
+
 const todayStr = formatDate(new Date());
 
 // ---------------- حماية الصفحة + بدء التشغيل ----------------
@@ -465,7 +470,10 @@ document.getElementById("visitForm").addEventListener("submit", async (e) => {
    نافذة ملف المريض (بيانات أساسية + تشخيص الزيارة الحالية + السجل)
    ===================================================================== */
 const patientModal = document.getElementById("patientModal");
-document.getElementById("closePatientModalBtn").addEventListener("click", () => patientModal.classList.remove("open"));
+document.getElementById("closePatientModalBtn").addEventListener("click", () => {
+  patientModal.classList.remove("open");
+  if (unsubAttachments) { unsubAttachments(); unsubAttachments = null; }
+});
 
 async function openPatientModal(patientId, visitId, visitStatus) {
   if (currentRole !== "doctor") return; // السكرتيرة ما تملك صلاحية فتح ملف المريض
@@ -509,6 +517,7 @@ async function openPatientModal(patientId, visitId, visitStatus) {
   document.getElementById("currentTreatment").value = "";
   diagSection.style.display = (visitId && visitStatus !== "done") ? "block" : "none";
 
+    listenAttachments(patientId);
     await loadVisitHistory(patientId);
     patientModal.classList.add("open");
   } catch (err) {
@@ -569,8 +578,15 @@ async function deletePatientRecord(patientId, patientName, closeModalAfter) {
   const confirmed = confirm(`حذف المريض "${patientName}" نهائياً؟ هذا الإجراء ما ينرجع.`);
   if (!confirmed) return;
   try {
+    // نحذف المرفقات الطبية معه (بعكس الزيارات، ما فيها أي قيمة مالية تستدعي الاحتفاظ بها يتيمة)
+    const attSnap = await getDocs(collection(db, "clinics", clinicId, "patients", patientId, "attachments"));
+    await Promise.all(attSnap.docs.map((d) => deleteDoc(d.ref)));
+
     await deleteDoc(doc(db, "clinics", clinicId, "patients", patientId));
-    if (closeModalAfter) patientModal.classList.remove("open");
+    if (closeModalAfter) {
+      patientModal.classList.remove("open");
+      if (unsubAttachments) { unsubAttachments(); unsubAttachments = null; }
+    }
   } catch (err) {
     alert("صار خطأ أثناء حذف المريض");
     console.error("deletePatientRecord failed", err);
@@ -613,6 +629,7 @@ document.getElementById("saveDiagnosisBtn").addEventListener("click", async () =
     });
     // 3) إغلاق النافذة — الاستشارة اكتملت والمريض انحفظ بسجل المرضى
     patientModal.classList.remove("open");
+    if (unsubAttachments) { unsubAttachments(); unsubAttachments = null; }
   } catch (err) {
     alert("صار خطأ أثناء إتمام الاستشارة");
     console.error("saveDiagnosisBtn failed", err);
@@ -935,5 +952,140 @@ document.getElementById("expenseForm").addEventListener("submit", async (e) => {
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = "حفظ الصرف";
+  }
+});
+
+/* =====================================================================
+   المرفقات الطبية — رفع/التقاط صور علاجات ووصفات، مضغوطة ومخزّنة داخل
+   Firestore مباشرة (بدون Firebase Storage) حتى تبقى ضمن الخطة المجانية
+   ===================================================================== */
+
+// ضغط الصورة وتصغيرها عبر canvas قبل التخزين — الهدف البقاء ضمن حد 1MB لكل مستند Firestore
+function compressImageToDataUrl(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round((height * maxDim) / width); width = maxDim; }
+          else { width = Math.round((width * maxDim) / height); height = maxDim; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => reject(new Error("تعذّر قراءة الصورة"));
+      img.src = e.target.result;
+    };
+    reader.onerror = () => reject(new Error("تعذّر قراءة الملف"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function compressImageWithLimit(file) {
+  let dataUrl = await compressImageToDataUrl(file, 1280, 0.7);
+  if (dataUrl.length > 700 * 1024) {
+    dataUrl = await compressImageToDataUrl(file, 1000, 0.5);
+  }
+  if (dataUrl.length > 900 * 1024) {
+    throw new Error("الصورة كبيرة جداً حتى بعد الضغط — جرّب صورة ثانية أو مقاس أصغر");
+  }
+  return dataUrl;
+}
+
+async function handleAttachmentFile(file) {
+  if (!file || !currentOpenPatientId) return;
+  if (!file.type.startsWith("image/")) {
+    alert("الملف المختار مو صورة");
+    return;
+  }
+  const loadingLabel = document.getElementById("attachUploadingLabel");
+  loadingLabel.style.display = "inline";
+  try {
+    const dataUrl = await compressImageWithLimit(file);
+    await addDoc(collection(db, "clinics", clinicId, "patients", currentOpenPatientId, "attachments"), {
+      imageBase64: dataUrl,
+      visitId: openPatientVisitContext || null,
+      uploadedAt: serverTimestamp(),
+      uploadedBy: currentUid
+    });
+  } catch (err) {
+    alert("تعذّر رفع الصورة: " + (err.message || "خطأ غير معروف"));
+    console.error("handleAttachmentFile failed", err);
+  } finally {
+    loadingLabel.style.display = "none";
+  }
+}
+
+document.getElementById("attachCameraInput").addEventListener("change", (e) => {
+  handleAttachmentFile(e.target.files[0]);
+  e.target.value = "";
+});
+document.getElementById("attachUploadInput").addEventListener("change", (e) => {
+  handleAttachmentFile(e.target.files[0]);
+  e.target.value = "";
+});
+
+function listenAttachments(patientId) {
+  if (unsubAttachments) unsubAttachments();
+  const q = query(
+    collection(db, "clinics", clinicId, "patients", patientId, "attachments"),
+    orderBy("uploadedAt", "desc")
+  );
+  unsubAttachments = onSnapshot(q, (snap) => {
+    currentAttachments = [];
+    snap.forEach((d) => currentAttachments.push({ id: d.id, ...d.data() }));
+    renderAttachments();
+  });
+}
+
+function renderAttachments() {
+  const grid = document.getElementById("attachmentsGrid");
+  const empty = document.getElementById("attachmentsEmpty");
+  if (!grid) return;
+  grid.innerHTML = "";
+  empty.style.display = currentAttachments.length === 0 ? "block" : "none";
+  currentAttachments.forEach((a) => {
+    const img = document.createElement("img");
+    img.src = a.imageBase64;
+    img.className = "attachment-thumb";
+    img.loading = "lazy";
+    img.addEventListener("click", () => openAttachmentView(a.id));
+    grid.appendChild(img);
+  });
+}
+
+function openAttachmentView(id) {
+  const a = currentAttachments.find((x) => x.id === id);
+  if (!a) return;
+  viewingAttachmentId = id;
+  document.getElementById("attachmentViewImg").src = a.imageBase64;
+  document.getElementById("attachmentViewMeta").textContent = a.visitId
+    ? "مرفق أثناء زيارة"
+    : "مرفق عام بملف المريض";
+  document.getElementById("attachmentViewModal").classList.add("open");
+}
+
+document.getElementById("closeAttachmentViewBtn").addEventListener("click", () => {
+  document.getElementById("attachmentViewModal").classList.remove("open");
+});
+
+document.getElementById("deleteAttachmentBtn").addEventListener("click", async () => {
+  if (!viewingAttachmentId || !currentOpenPatientId) return;
+  if (!confirm("حذف هذا المرفق نهائياً؟")) return;
+  const btn = document.getElementById("deleteAttachmentBtn");
+  btn.disabled = true;
+  try {
+    await deleteDoc(doc(db, "clinics", clinicId, "patients", currentOpenPatientId, "attachments", viewingAttachmentId));
+    document.getElementById("attachmentViewModal").classList.remove("open");
+  } catch (err) {
+    alert("تعذّر حذف المرفق");
+    console.error("deleteAttachmentBtn failed", err);
+  } finally {
+    btn.disabled = false;
   }
 });
