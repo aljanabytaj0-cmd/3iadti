@@ -8,6 +8,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  deleteUser,
   signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
@@ -26,7 +27,8 @@ import {
   getDocs,
   onSnapshot,
   runTransaction,
-  serverTimestamp
+  serverTimestamp,
+  increment
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -37,7 +39,7 @@ export const db = getFirestore(app);
 export {
   onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail,
   doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, query, where, orderBy, limit,
-  getDocs, onSnapshot, runTransaction, serverTimestamp
+  getDocs, onSnapshot, runTransaction, serverTimestamp, increment
 };
 
 // جلب مستند المستخدم (الدور + العيادة المرتبط بها)
@@ -60,6 +62,21 @@ export async function createAuthUserWithoutSignOut(email, password) {
   } catch (err) {
     await deleteApp(secondaryApp);
     throw err;
+  }
+}
+
+// تراجع: حذف حساب Auth تم إنشاؤه للتو، يُستخدم لو فشلت خطوة لاحقة بإنشاء العيادة
+// (مثلاً نجح حساب الطبيب وفشل حساب السكرتيرة) — حتى ما يضل حساب معلّق بدون عيادة
+export async function deleteAuthUserWithoutSignOut(email, password) {
+  const secondaryApp = initializeApp(firebaseConfig, "secondary-del-" + Date.now());
+  const secondaryAuth = getAuth(secondaryApp);
+  try {
+    const cred = await signInWithEmailAndPassword(secondaryAuth, email, password);
+    await deleteUser(cred.user);
+  } catch (err) {
+    console.error("deleteAuthUserWithoutSignOut failed (rollback best-effort)", err);
+  } finally {
+    await deleteApp(secondaryApp);
   }
 }
 
