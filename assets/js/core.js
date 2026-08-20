@@ -12,7 +12,9 @@ import {
   signOut
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
-  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   getDoc,
   setDoc,
@@ -34,7 +36,13 @@ import { firebaseConfig } from "./firebase-config.js";
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// تفعيل التخزين المحلي الدائم (IndexedDB) — يخلّي التطبيق يشتغل بدون إنترنت:
+// أي قراءة سابقة تضل محفوظة بالجهاز، وأي كتابة (إضافة/تعديل) وأنت أوفلاين
+// تنحفظ محلياً وتترفع تلقائياً بمجرد رجوع الاتصال، بدون أي كود إضافي منّا.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 
 export {
   onAuthStateChanged, signInWithEmailAndPassword, signOut, sendPasswordResetEmail,
