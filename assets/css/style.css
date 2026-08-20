@@ -356,6 +356,14 @@ tbody tr:hover{ background:#FAFCFC; }
 /* ---------- رأس الطباعة (يظهر فقط عند التصدير/الطباعة) ---------- */
 .print-header{ display:none; }
 
+/* ---------- شريط حالة الاتصال (أوفلاين / جارِ المزامنة) ---------- */
+#offlineBanner{
+  text-align:center; padding:10px 16px; font-size:13px; font-weight:700;
+  color:#fff; position:sticky; top:0; z-index:200;
+}
+#offlineBanner.offline{ background:var(--amber); }
+#offlineBanner.syncing{ background:var(--teal); }
+
 /* ---------- زر تعديل المبلغ الصغير ---------- */
 .fee-edit-btn{
   background:none; border:none; color:var(--teal); cursor:pointer;
@@ -365,7 +373,7 @@ tbody tr:hover{ background:#FAFCFC; }
 .fee-edit-btn:hover{ color:var(--navy); }
 
 @media print{
-  .sidebar, .btn, .empty-state, .fee-edit-btn{ display:none !important; }
+  .sidebar, .btn, .empty-state, .fee-edit-btn, #offlineBanner{ display:none !important; }
   .print-header{
     display:block !important;
     text-align:center; margin-bottom:22px; padding-bottom:14px;
