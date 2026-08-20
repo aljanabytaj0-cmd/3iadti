@@ -34,6 +34,31 @@ let viewingAttachmentId = null;
 
 const todayStr = formatDate(new Date());
 
+/* =====================================================================
+   حالة الاتصال — العمل بدون إنترنت + إشعار عند التحول أوفلاين/أونلاين
+   الحفظ والمزامنة الفعلية يتكفّل بيهم Firestore تلقائياً (persistentLocalCache
+   المفعّلة بـ core.js) — هذا الجزء بس للإشعار المرئي للمستخدم
+   ===================================================================== */
+const offlineBanner = document.getElementById("offlineBanner");
+
+function updateConnectionBanner() {
+  if (!navigator.onLine) {
+    offlineBanner.className = "offline";
+    offlineBanner.textContent = "📡 أنت غير متصل بالإنترنت — أي حجز أو إجراء تسويه ينحفظ عندك بالجهاز ويترفع تلقائياً لما يرجع الاتصال";
+    offlineBanner.style.display = "block";
+  } else {
+    offlineBanner.className = "syncing";
+    offlineBanner.textContent = "✅ رجع الاتصال — جارِ رفع أي بيانات محفوظة محلياً...";
+    offlineBanner.style.display = "block";
+    setTimeout(() => {
+      if (navigator.onLine) offlineBanner.style.display = "none";
+    }, 4000);
+  }
+}
+window.addEventListener("offline", updateConnectionBanner);
+window.addEventListener("online", updateConnectionBanner);
+if (!navigator.onLine) updateConnectionBanner();
+
 // ---------------- حماية الصفحة + بدء التشغيل ----------------
 guardClinicPage((user, userDoc) => {
   clinicId = userDoc.clinicId;
@@ -222,10 +247,20 @@ function listenTodayVisits() {
     where("date", "==", todayStr),
     orderBy("sortTime", "asc")
   );
-  onSnapshot(q, (snap) => {
+  onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
     todayVisits = [];
     snap.forEach((d) => todayVisits.push({ id: d.id, ...d.data() }));
     renderQueue();
+
+    // لو فيه كتابات محفوظة محلياً بس ما وصلت السيرفر بعد (سواء أوفلاين أو شبكة بطيئة)،
+    // نوضّح هذا بنفس شريط حالة الاتصال بدل ما نخلي المستخدم يفتكر إن الاتصال رجع فعلاً
+    if (snap.metadata.hasPendingWrites && navigator.onLine) {
+      offlineBanner.className = "syncing";
+      offlineBanner.textContent = "🔄 جارِ رفع بيانات محفوظة محلياً لسيرفر العيادة...";
+      offlineBanner.style.display = "block";
+    } else if (!snap.metadata.hasPendingWrites && navigator.onLine && offlineBanner.className === "syncing") {
+      offlineBanner.style.display = "none";
+    }
   });
 }
 
@@ -427,14 +462,23 @@ document.getElementById("visitForm").addEventListener("submit", async (e) => {
     const fee = Number(document.getElementById("visitFee").value);
     if (!fee || fee <= 0) throw new Error("FEE_REQUIRED");
 
-    // رقم دور ذري لهذا اليوم (عداد آمن حتى مع تسجيل متزامن)
-    const counterRef = doc(db, "clinics", clinicId, "counters", todayStr);
-    const queueNumber = await runTransaction(db, async (tx) => {
-      const snap = await tx.get(counterRef);
-      const next = (snap.exists() ? snap.data().lastNumber : 0) + 1;
-      tx.set(counterRef, { lastNumber: next }, { merge: true });
-      return next;
-    });
+    // رقم دور ذري لهذا اليوم (عداد آمن حتى مع تسجيل متزامن) — يحتاج اتصال فعلي
+    // لأن المعاملات (transactions) ما تشتغل بدون إنترنت. لو أوفلاين، نتجاوزه ونكمل
+    // الحجز عادي (الترتيب أصلاً يعتمد على sortTime مو queueNumber)، ويترفع لاحقاً بدون رقم دور.
+    let queueNumber = null;
+    if (navigator.onLine) {
+      try {
+        const counterRef = doc(db, "clinics", clinicId, "counters", todayStr);
+        queueNumber = await runTransaction(db, async (tx) => {
+          const snap = await tx.get(counterRef);
+          const next = (snap.exists() ? snap.data().lastNumber : 0) + 1;
+          tx.set(counterRef, { lastNumber: next }, { merge: true });
+          return next;
+        });
+      } catch (txErr) {
+        console.warn("تعذّر تحديث عداد الطابور (على الأغلب مشكلة اتصال) — الحجز يكمل بدون رقم دور", txErr);
+      }
+    }
 
     await addDoc(collection(db, "clinics", clinicId, "visits"), {
       patientId, patientName, patientPhone,
